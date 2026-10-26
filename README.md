@@ -1,0 +1,61 @@
+# Bible Study App: Phase 1 clickable prototype
+
+A mobile-first web prototype of the Listen and Study screens. Plain HTML, CSS and JavaScript with no build step. Live site (GitHub Pages): https://johnny-git-lab.github.io/AI-Bible-Study/ . Or open `index.html` through any static web server.
+
+## What works
+
+**Listen** (radio-style layout, approved 2026-10-26)
+- Top half is the display: sermon title, live transcript line, verse chips, and the timeline.
+- Bottom half is round buttons. Three small ones across the middle, then the big Play/Pause at the bottom center with a round button on each side.
+- A Listen/Study switch at the top replaces the bottom tab bar. "+ Add" opens: paste a YouTube link, upload from device, record (coming later), or use the sample sermon.
+- Tap the transcript line to pause and open the full transcript, larger. Tap lines to pick them, or press and hold to select words, then Copy or Send to note (new note or an existing topic). Voice: "Show the transcript".
+- YouTube links are accepted and stored, but this preview can't play YouTube. The real app would use YouTube's embedded player.
+- Small round buttons: Version cycle (KJV, then ESV, NASB and NIV shown as locked paid add-ons), Language cycle (English, Spanish, French interface text), and a reserved button.
+- Large Play/Pause, a reserved button on the left, and Command on the right.
+- Placeholder sermon ("God So Loved the World") with a silent simulated clock, a scrubber, and a timestamped transcript whose verse chips open the Study view.
+- "Load sermon audio" plays a real audio file from the device. Transcription is not wired yet.
+- Command pauses the audio and opens a simulated voice card. Type a question or tap an example. Results appear as a card over the middle of the screen, so Play and Command stay reachable. Pressing Play closes the card and resumes at the same position.
+- Supported commands: word count, Greek or Hebrew for a word, where a word appears in Greek or Hebrew, find verses, define, copy to notes, and cross-references. Anything else is treated as interpretive and shows what would be sent to Claude.
+- Keyboard stand-in for the future device (not shown on screen): `1` `2` `3` top row, `Z` left, `Space` play, `C` command.
+
+**Study**
+- Bible: book and chapter pickers, search, a selected verse, and Strong's links on tagged words that open the Lexicon.
+- Commentaries: entries for the selected verse from the bundled commentary modules.
+- Lexicon: Strong's search, and an entry view with definition, KJV renderings, and every verse that uses the word.
+- Notes: grouped by sermon, topic or date. Sermon captures carry the sermon title and timestamp. Tapping a verse chip opens the Bible at that verse. Notes are stored in the browser only.
+- Cross-Ref: related passages for the selected verse.
+
+## Structure
+
+| File | Role |
+|---|---|
+| `js/buttons.js` | Button layer. Six logical buttons (`version`, `language`, `reserved_top`, `reserved_left`, `play_pause`, `command`). Screen taps, keyboard keys and later the Bluetooth device all call `BSButtons.press(id)`. |
+| `js/app.js` | Controller that maps each button to an action, plus shared state and tab switching. Screens never handle button presses themselves. |
+| `js/data.js` | Data layer. Every content source is a registered module (`bible`, `lexicon`, `commentary`, `crossref`, `dictionary`) with a license of `public-domain` or `paid-addon`. Adding ESV later means registering one more module. |
+| `js/commands.js` | Command router. Takes recognised text and returns a result card. Local lookups for word questions, a Claude placeholder for interpretive ones. |
+| `js/player.js` | Sermon player with one interface for the simulated sample and a real audio file. |
+| `js/notes.js` | Notes store. |
+| `js/listen.js`, `js/study.js` | The two screens. |
+| `js/i18n.js` | Interface strings for English, Spanish and French. |
+
+## Placeholder data
+
+- About 25 KJV verses from Genesis, Deuteronomy, Psalms, John, Romans, 1 Corinthians, Hebrews and 1 John, tagged with Strong's numbers.
+- About 35 Strong's entries. Definitions are short Strong's-style summaries.
+- Commentary entries are placeholder summaries, not quotations from Matthew Henry, Barnes, Clarke or JFB. The real public-domain texts replace them when the modules load.
+- Counts and search results cover the sample verses only.
+
+## Open decisions (left as placeholders)
+
+1. App name. The prototype is titled "Bible Study Prototype".
+2. Reserved buttons. Top-right and bottom-left show "Reserved" and a message when pressed.
+3. On-device versus Claude for voice commands. The router already splits word lookups (local) from interpretive questions (Claude).
+4. Speech-to-text provider. Voice is simulated by typing. Uploaded audio shows a "transcript will appear here" placeholder.
+5. Which commentaries to bundle. Matthew Henry, Barnes, Clarke and JFB are sample modules. Pulpit Commentary is registered as not bundled.
+6. Subscription model. ESV, NASB and NIV appear as locked add-ons with no purchase flow.
+
+Also undecided: whether the Language button should change only the interface, or also switch the Bible text to a public-domain translation in that language (Reina-Valera 1909, Louis Segond 1910). The prototype changes only the interface.
+
+## Not in this prototype
+
+Real speech recognition, transcription, the Claude API, the transcript highlight-to-verse flow, "Organize by topic", split view, and the full Bible and lexicon data.
