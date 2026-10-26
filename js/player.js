@@ -152,6 +152,9 @@
         events: {
           onReady: () => {
             ytLive = true;
+            // Ask for the lowest quality to save data. YouTube treats this as a hint and
+            // mainly chooses quality from the player's size, which is why it starts compact.
+            try { yt.setPlaybackQuality('small'); } catch (e) { /* not supported */ }
             sermon.duration = yt.getDuration() || sermon.duration;
             const data = yt.getVideoData ? yt.getVideoData() : null;
             if (data && data.title) { sermon.title = data.title; sermon.speaker = data.author || sermon.speaker; }

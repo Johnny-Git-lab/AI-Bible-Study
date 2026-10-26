@@ -10,7 +10,6 @@
 body { margin: 0; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
-</style>
 <title>Bible Study Prototype</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -167,7 +166,11 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .ttext { font-family: var(--font-text); font-size: 19px; line-height: 1.5; user-select: text; -webkit-user-select: text; }
 .t-actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
 .t-actions select { min-width: 0; }
+/* YouTube requires the player to stay visible and at least 200 x 200; compact uses that minimum. */
+.yt-box { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.yt-box .linkish { font-size: 13px; }
 .yt-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 14px; overflow: hidden; background: #000; flex: none; }
+.yt-wrap.compact { width: 200px; height: 200px; aspect-ratio: auto; border-radius: 16px; }
 .yt-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 @keyframes rise { from { transform: translateY(12px); opacity: .6; } }
 .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 14px 8px 16px; }
@@ -333,7 +336,10 @@ select, .search {
           <p class="eyebrow"><span class="dot"></span><span id="playState">Paused</span></p>
           <h1 id="sermonTitle">God So Loved the World</h1>
           <p class="speaker" id="sermonMeta"></p>
-          <div class="yt-wrap" id="ytWrap" hidden><div id="ytPlayer"></div></div>
+          <div class="yt-box" id="ytBox" hidden>
+            <div class="yt-wrap compact" id="ytWrap"><div id="ytPlayer"></div></div>
+            <button class="linkish" id="ytSize" type="button">Expand video</button>
+          </div>
           <blockquote class="caption" id="caption" role="button" tabindex="0" aria-label="Open the transcript"></blockquote>
           <div class="caption-refs" id="captionRefs"></div>
         </div>

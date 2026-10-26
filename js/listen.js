@@ -19,6 +19,11 @@ window.ListenScreen = (function () {
     scrub.addEventListener('input', () => { scrubbing = true; $('#tCur').textContent = BSPlayer.fmt(+scrub.value); });
     scrub.addEventListener('change', () => { scrubbing = false; BSPlayer.seek(+scrub.value); });
 
+    $('#ytSize').addEventListener('click', () => {
+      const compact = $('#ytWrap').classList.toggle('compact');
+      $('#ytSize').textContent = compact ? 'Expand video' : 'Shrink video';
+    });
+
     const cap = $('#caption');
     cap.addEventListener('click', openTranscript);
     cap.addEventListener('keydown', e => { if (e.key === 'Enter') openTranscript(); });
@@ -60,7 +65,11 @@ window.ListenScreen = (function () {
       file: 'From your device',
       youtube: p.ytLive ? 'Playing from YouTube' : 'YouTube link \u00b7 can\u2019t play in this preview (works on the hosted site)',
     }[p.source];
-    $('#ytWrap').hidden = !(p.source === 'youtube' && p.ytLive);
+    const ytOn = p.source === 'youtube' && p.ytLive;
+    $('#ytBox').hidden = !ytOn;
+    // A YouTube sermon has no transcript yet, so the video tile takes the caption's place.
+    $('#caption').hidden = ytOn;
+    $('#captionRefs').hidden = ytOn;
     $('#cmdBtn').classList.toggle('live', sheet === 'input');
     if (sheet && sheet !== 'add') renderFoot();
   }
