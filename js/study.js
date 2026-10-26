@@ -41,10 +41,38 @@ window.StudyScreen = (function () {
       <p>${esc(v ? v.text : 'Not available in this version.')}</p></div>`;
   }
 
-  function renderVerseText(v) {
-    return BSData.tokens(v.tagged).map(t => t.strongs
-      ? `<span class="w" data-s="${t.strongs}">${esc(t.text)}</span>`
-      : esc(t.text)).join('');
+  // KJV+ shows each word's Strong's number after it, as in e-Sword's KJV+.
+  function renderVerseText(v, plus) {
+    return BSData.tokens(v.tagged).map(t => !t.strongs ? esc(t.text)
+      : `<span class="w" data-s="${t.strongs}">${esc(t.text)}</span>${plus ? `<sup class="sn" data-s="${t.strongs}">${t.strongs}</sup>` : ''}`).join('');
+  }
+
+  function scopeOf(st) {
+    if (st.searchScope === 'OT' || st.searchScope === 'NT') return { testament: st.searchScope };
+    if (st.searchScope === 'book') return { book: BSApp.listeningBook() };
+    return null;
+  }
+
+  function searchView(st, tv) {
+    const run = scope => st.searchStrongs
+      ? BSData.occurrences(st.searchStrongs, scope).map(o => o.verse)
+      : BSData.searchVerses(st.bibleQuery, tv, scope);
+    const book = BSData.bookById(BSApp.listeningBook());
+    const scopes = [['all', 'All', null], ['OT', 'Old Testament', { testament: 'OT' }], ['NT', 'New Testament', { testament: 'NT' }],
+      ['book', book.name, { book: book.id }]];
+    const counts = Object.fromEntries(scopes.map(([id, , sc]) => [id, run(sc).length]));
+    const hits = run(scopeOf(st));
+    const e = st.searchStrongs && BSData.lexiconEntry(st.searchStrongs);
+    const title = e ? `${e.num} <span class="lemma-sm">${esc(e.lemma)}</span> ${esc(e.translit)}` : `\u201c${esc(st.bibleQuery)}\u201d`;
+    return `<div class="search-head">
+        <div><p class="src" style="margin:0">Search ${esc(BSApp.textVersion().abbrev)}</p><h2>${title}</h2></div>
+        <button class="x" id="clearSearch" aria-label="Close search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="scope-row" role="group" aria-label="Search in">
+        ${scopes.map(([id, label]) => `<button data-scope="${id}" aria-pressed="${st.searchScope === id}">${esc(label)} <span>${counts[id]}</span></button>`).join('')}
+      </div>
+      ${e ? `<p class="fine">${esc(e.definition)} <button class="linkish" data-lex="${e.num}">Full entry</button></p>` : ''}
+      ${BSCommands.verseList(hits, e ? null : st.bibleQuery, 100)}`;
   }
 
   /* ---------- Bible ---------- */
@@ -59,14 +87,14 @@ window.StudyScreen = (function () {
       `<p class="fine">${esc(ver.abbrev)} is a paid add-on that isn’t installed, so the text below is KJV.</p>`;
 
     let body;
-    if (st.bibleQuery.trim()) {
-      const hits = BSData.searchVerses(st.bibleQuery, tv);
-      body = `<p class="fine">${hits.length} ${hits.length === 1 ? 'verse' : 'verses'} in the ${esc(BSApp.textVersion().abbrev)}</p>${BSCommands.verseList(hits, st.bibleQuery, 100)}`;
+    const plus = !!ver.strongsInline;
+    if (st.bibleQuery.trim() || st.searchStrongs) {
+      body = searchView(st, tv);
     } else {
       const verses = BSData.chapterVerses(cur.book.id, st.chapter, tv);
       body = `<h2 class="chapter-head">${esc(cur.localName && BSApp.textVersion().language !== 'en' ? cur.localName : cur.book.name)} ${st.chapter}</h2>
-        <div class="scripture ${st.strongs ? 'strongs-on' : ''}" id="scripture">
-          ${verses.map(v => `<span class="verse ${v.key === st.selectedRef ? 'sel' : ''}" data-key="${v.key}"><sup>${v.key.split('.')[2]}</sup>${renderVerseText(v)}</span>`).join('')}
+        <div class="scripture ${st.strongs || plus ? 'strongs-on' : ''} ${plus ? 'plus' : ''}" id="scripture">
+          ${verses.map(v => `<span class="verse ${v.key === st.selectedRef ? 'sel' : ''}" data-key="${v.key}"><sup>${v.key.split('.')[2]}</sup>${renderVerseText(v, plus)}</span>`).join('')}
         </div>`;
     }
 
@@ -78,13 +106,13 @@ window.StudyScreen = (function () {
         <span class="version-pill">${esc(ver.abbrev)}${ver.installed ? '' : ' (locked)'}</span>
       </div>
       <input class="search" id="bibleSearch" type="search" placeholder="${esc(BSi18n.t('searchBible'))}" value="${esc(st.bibleQuery)}">
-      <div class="toggle-row">
-        <label><input type="checkbox" id="strongsToggle" ${st.strongs ? 'checked' : ''}> Show Strong’s links</label>
-        <span>Tap a verse to select it</span>
-      </div>
+      ${st.bibleQuery.trim() || st.searchStrongs ? '' : `<div class="toggle-row">
+        ${plus ? '<span>Tap a number for its meaning. Press and hold to search.</span>'
+          : `<label><input type="checkbox" id="strongsToggle" ${st.strongs ? 'checked' : ''}> Show Strong\u2019s links</label><span>Tap a verse to select it</span>`}
+      </div>`}
       ${lockNote}
       ${body}
-      ${sel ? `<div class="sel-bar"><span class="ref">${esc(sel.ref)}</span>
+      ${sel && !st.bibleQuery.trim() && !st.searchStrongs ? `<div class="sel-bar"><span class="ref">${esc(sel.ref)}</span>
         <button data-jump="commentaries">Commentary</button>
         <button data-jump="crossref">Cross-refs</button>
         <button data-jump="notes" data-addnote>Add note</button></div>` : ''}`;
@@ -195,17 +223,24 @@ window.StudyScreen = (function () {
         clearTimeout(t);
         t = setTimeout(() => {
           S().bibleQuery = search.value;
+          S().searchStrongs = null;
           render();
           const s = $('#bibleSearch');
           s.focus();
           s.setSelectionRange(s.value.length, s.value.length);
         }, 250);
       });
-      p.querySelector('#strongsToggle').addEventListener('change', e => { S().strongs = e.target.checked; render(); });
+      const toggle = p.querySelector('#strongsToggle');
+      if (toggle) toggle.addEventListener('change', e => { S().strongs = e.target.checked; render(); });
+      const clear = p.querySelector('#clearSearch');
+      if (clear) clear.addEventListener('click', () => { Object.assign(S(), { bibleQuery: '', searchStrongs: null }); render(); });
+      p.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => { S().searchScope = b.dataset.scope; render(); }));
       const scripture = p.querySelector('#scripture');
+      if (scripture) wireLongPress(scripture);
       if (scripture) scripture.addEventListener('click', e => {
-        const w = e.target.closest('.w[data-s]');
-        if (w && S().strongs) { BSApp.gotoLexicon(w.dataset.s); return; }
+        if (longPressed) { longPressed = false; return; }
+        const w = e.target.closest('.sn[data-s]') || (S().strongs || BSApp.version().strongsInline ? e.target.closest('.w[data-s]') : null);
+        if (w) { BSApp.gotoLexicon(w.dataset.s); return; }
         const v = e.target.closest('.verse');
         if (v) { S().selectedRef = v.dataset.key; render(); }
       });
@@ -241,6 +276,60 @@ window.StudyScreen = (function () {
       p.querySelector('#resetNotes').addEventListener('click', () => BSNotes.reset());
     },
   };
+
+  // Press and hold a Strong's number (or tagged word) for a search window.
+  let longPressed = false;
+  function wireLongPress(root) {
+    let timer = null;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    root.addEventListener('pointerdown', e => {
+      const w = e.target.closest('.sn[data-s], .strongs-on .w[data-s]');
+      if (!w) return;
+      cancel();
+      timer = setTimeout(() => { longPressed = true; openStrongsPop(w.dataset.s, w.closest('.verse').dataset.key); }, 500);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel', 'scroll'].forEach(ev => root.addEventListener(ev, cancel));
+    root.addEventListener('contextmenu', e => { if (e.target.closest('[data-s]')) e.preventDefault(); });
+  }
+
+  function openStrongsPop(num, verseKey) {
+    closeStrongsPop();
+    const e = BSData.lexiconEntry(num);
+    if (!e) return;
+    const book = BSData.bookById(verseKey.split('.')[0]);
+    const el = document.createElement('div');
+    el.className = 'strongs-pop';
+    el.id = 'strongsPop';
+    el.setAttribute('role', 'dialog');
+    el.innerHTML = `
+      <div class="pop-head">
+        <div><span class="lemma" lang="${num[0] === 'G' ? 'grc' : 'he'}">${esc(e.lemma)}</span>
+          <p class="lex-meta"><span class="num">${num}</span> <b>${esc(e.translit)}</b> \u00b7 ${esc(e.language)}</p></div>
+        <button class="x" data-popclose aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <p class="pop-def">${esc(e.definition)}</p>
+      <button class="btn quiet pop-full" data-poplex>Open full definition</button>
+      <p class="src">Search ${num} in</p>
+      <div class="pop-scopes">
+        <button class="btn" data-popscope="all">Whole Bible</button>
+        <button class="btn quiet" data-popscope="OT">Old Testament</button>
+        <button class="btn quiet" data-popscope="NT">New Testament</button>
+        <button class="btn quiet" data-popscope="book" data-book="${book.id}">${esc(book.name)} only</button>
+      </div>`;
+    document.getElementById('app').appendChild(el);
+    el.querySelector('[data-popclose]').addEventListener('click', closeStrongsPop);
+    el.querySelector('[data-poplex]').addEventListener('click', () => { closeStrongsPop(); BSApp.gotoLexicon(num); });
+    el.querySelectorAll('[data-popscope]').forEach(b => b.addEventListener('click', () => {
+      closeStrongsPop();
+      if (b.dataset.book) S().book = b.dataset.book;
+      BSApp.openSearch({ strongs: num, scope: b.dataset.popscope });
+    }));
+  }
+
+  function closeStrongsPop() {
+    const el = document.getElementById('strongsPop');
+    if (el) el.remove();
+  }
 
   return { init, render, scrollToSelected };
 })();

@@ -189,6 +189,7 @@ window.ListenScreen = (function () {
     BSSpeech.stop();
     if (/^(?:show|open)(?: me)?(?: the)? transcript/i.test(text.trim())) { openTranscript(); return; }
     const r = BSCommands.run(text, ctx());
+    if (r.navigate) { r.navigate(); return; }
     if (r.route === 'capture') BSApp.toast('Captured to Notes.');
     showResult(text, r);
   }

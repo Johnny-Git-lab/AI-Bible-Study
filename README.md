@@ -19,7 +19,8 @@ A mobile-first web prototype of the Listen and Study screens. Plain HTML, CSS an
 - Keyboard stand-in for the future device (not shown on screen): `1` `2` `3` top row, `Z` left, `Space` play, `C` command.
 
 **Study**
-- Bible: book and chapter pickers, search, a selected verse, and Strong's links on tagged words that open the Lexicon.
+- Bible: book and chapter pickers, search, and a selected verse. In KJV+ each word shows its Strong's number in blue: tap it for the definition, press and hold for a window that searches that word in the whole Bible, Old Testament, New Testament or the current book.
+- Search (typed, or a voice "find" command such as "Find light in the New Testament") opens a results screen with All / Old Testament / New Testament / current-book filters and counts.
 - Commentaries: entries for the selected verse from the bundled commentary modules.
 - Lexicon: Strong's search, and an entry view with definition, KJV renderings, and every verse that uses the word.
 - Notes: grouped by sermon, topic or date. Sermon captures carry the sermon title and timestamp. Tapping a verse chip opens the Bible at that verse. Notes are stored in the browser only.

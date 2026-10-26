@@ -14,6 +14,8 @@
     book: 'Jhn',
     chapter: 3,
     bibleQuery: '',
+    searchStrongs: null,   // Strong's number being searched, e.g. G26
+    searchScope: 'all',    // all | OT | NT | book
     strongs: true,
     lexQuery: '',
     lexSelected: null,
@@ -60,10 +62,25 @@
 
   function gotoVerse(key) {
     const [b, c] = key.split('.');
-    Object.assign(state, { selectedRef: key, book: b, chapter: +c, bibleQuery: '' });
+    Object.assign(state, { selectedRef: key, book: b, chapter: +c, bibleQuery: '', searchStrongs: null });
     ListenScreen.closeSheet();
     setSub('bible');
     StudyScreen.scrollToSelected();
+  }
+
+  // Opens the Bible search screen, from a voice "find" command or a Strong's number.
+  function openSearch({ query = '', strongs = null, scope = 'all' } = {}) {
+    Object.assign(state, { bibleQuery: query, searchStrongs: strongs, searchScope: scope });
+    ListenScreen.closeSheet();
+    setSub('bible');
+    $('#panel').scrollTop = 0;
+  }
+
+  // The book "being listened to": the verse the sermon is on now, otherwise the open chapter.
+  function listeningBook() {
+    const seg = BSPlayer.state().segment;
+    const ref = seg && seg.refs && seg.refs[0];
+    return ref ? ref.split('.')[0] : state.book;
   }
 
   function gotoLexicon(num) {
@@ -161,7 +178,7 @@
       .catch(err => { state.dataError = err.message; rerender(); });
   }
 
-  window.BSApp = { state, version, textVersion, rerender, toast, setTab, setSub, gotoVerse, gotoLexicon };
+  window.BSApp = { state, version, textVersion, rerender, openSearch, listeningBook, toast, setTab, setSub, gotoVerse, gotoLexicon };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

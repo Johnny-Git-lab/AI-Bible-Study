@@ -14,7 +14,7 @@
     { kind: 'count', re: new RegExp(`how many times (?:does|is|do) (?:the word )?${W} (?:appear|used|occur|show up|mentioned)`, 'i') },
     { kind: 'whereOriginal', re: new RegExp(`where (?:does|is) ${W} (?:appear |used |found )?in (?:the )?(greek|hebrew)`, 'i') },
     { kind: 'original', re: new RegExp(`(?:show me |what is |what's |give me )?the (greek|hebrew)(?: word)? for ${W}`, 'i') },
-    { kind: 'find', re: new RegExp(`(?:find|show|list)(?: me)?(?: all)?(?: the)? verses (?:with|containing|that say|about|on) ${W}`, 'i') },
+    { kind: 'find', re: new RegExp(`(?:find|show|list|search)(?: me)?(?: all)?(?: the)?(?: verses| for)? (?:with |containing |that say |about |on |for )?${W}(?: (?:in|from) (?:the )?(old|new) testament| (?:in|from) (?:this|the current) book)?$`, 'i') },
     { kind: 'define', re: new RegExp(`^(?:define|definition of|what does) ${W}`, 'i') },
     { kind: 'capture', re: /(?:copy|save|add|put) (?:this|that|it)(?: passage| verse)? (?:to|in|into) (?:my )?notes/i },
     { kind: 'xref', re: /cross[- ]?ref(?:erence)?s? (?:for|of|on|to) (.+)/i },
@@ -98,7 +98,12 @@
       };
     },
 
-    find([, word], ctx) {
+    find([m, word, testament], ctx) {
+      const scope = testament ? (testament.toLowerCase() === 'old' ? 'OT' : 'NT') : /(this|the current) book$/i.test(m) ? 'book' : 'all';
+      return { kind: 'navigate', title: '', html: '', navigate: () => BSApp.openSearch({ query: word, scope }) };
+    },
+
+    findCard([, word], ctx) {
       const verses = BSData.searchVerses(word, ctx.version);
       return { kind: 'local', title: `Verses with “${word}”`, html: `<p class="muted">${verses.length} in the ${esc(ctx.versionAbbrev)}, including other forms of the word.</p>${verseList(verses, word, 20)}` };
     },
