@@ -36,8 +36,9 @@ window.ListenScreen = (function () {
     $('#playState').textContent = BSi18n.t(p.playing ? 'nowPlaying' : 'paused');
     $('#sermonTitle').textContent = p.sermon.title;
     $('#sermonMeta').textContent = `${p.sermon.speaker} · ${p.sermon.date}`;
-    $('#icoPlay').hidden = p.playing;
-    $('#icoPause').hidden = !p.playing;
+    // SVG elements have no .hidden property, so set the attribute directly.
+    $('#icoPlay').toggleAttribute('hidden', p.playing);
+    $('#icoPause').toggleAttribute('hidden', !p.playing);
     $('#playBtn').setAttribute('aria-label', BSi18n.t(p.playing ? 'pause' : 'play'));
 
     // Only redraw the caption when the transcript segment changes, so its chips stay tappable.
