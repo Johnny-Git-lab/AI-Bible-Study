@@ -24,7 +24,16 @@
 
   function version() { return versions[state.versionIdx]; }
   // The text actually shown: locked versions fall back to KJV.
-  function textVersion() { const v = version(); return v.installed ? v : BSData.getModule('kjv'); }
+  // The module whose text is shown: KJV+ reads the KJV text; locked or still-loading versions fall back to KJV.
+  function textVersion() {
+    let v = version();
+    if (v.source) v = BSData.getModule(v.source);
+    return v.installed && BSData.isLoaded(v.id) ? v : BSData.getModule('kjv');
+  }
+
+  function rerender() {
+    if (state.tab === 'study') StudyScreen.render();
+  }
 
   let toastTimer;
   function toast(msg) {
@@ -76,6 +85,7 @@
   function renderVersion() {
     const v = version();
     $('#versionValue').innerHTML = BSCommands.esc(v.abbrev) + (v.installed ? '' : LOCK);
+    $('#versionValue').style.fontSize = v.abbrev.length > 4 ? '12px' : '';
   }
 
   /* ---------- controller: button id -> action ---------- */
@@ -85,8 +95,14 @@
     state.versionIdx = (state.versionIdx + 1) % versions.length;
     renderVersion();
     const v = version();
-    toast(v.installed ? `${v.abbrev}: ${v.name}` : `${v.abbrev} is a paid add-on and isn’t installed. Text stays in KJV.`);
-    if (state.tab === 'study') StudyScreen.render();
+    if (!v.installed) toast(`${v.abbrev} is a paid add-on and isn\u2019t installed. Text stays in KJV.`);
+    else if (BSData.isLoaded(v.source || v.id)) toast(`${v.abbrev}: ${v.name}`);
+    else {
+      toast(`Loading ${v.name}\u2026`);
+      BSData.load(v.id).then(() => { if (version() === v) toast(`${v.abbrev}: ${v.name}`); rerender(); })
+        .catch(err => toast(err.message));
+    }
+    rerender();
   });
 
   BSButtons.on(B.LANGUAGE, () => {
@@ -138,9 +154,14 @@
     StudyScreen.init();
     renderVersion();
     applyLanguage();
+
+    // The full KJV and Strong's dictionaries load in the background; Listen works meanwhile.
+    Promise.all([BSData.load('kjv'), BSData.load('strongs')])
+      .then(() => { state.dataReady = true; rerender(); })
+      .catch(err => { state.dataError = err.message; rerender(); });
   }
 
-  window.BSApp = { state, version, textVersion, toast, setTab, setSub, gotoVerse, gotoLexicon };
+  window.BSApp = { state, version, textVersion, rerender, toast, setTab, setSub, gotoVerse, gotoLexicon };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

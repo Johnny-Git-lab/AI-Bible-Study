@@ -14,6 +14,12 @@ window.StudyScreen = (function () {
   function render() {
     document.querySelectorAll('[data-sub]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.sub === S().sub)));
     const panel = $('#panel');
+    if (!S().dataReady && ['bible', 'lexicon', 'crossref', 'commentaries'].includes(S().sub)) {
+      panel.innerHTML = S().dataError
+        ? `<p class="muted">The Bible text didn\u2019t load: ${esc(S().dataError)}. Check your connection and reload.</p>`
+        : '<p class="muted">Loading the Bible and Strong\u2019s dictionaries\u2026</p>';
+      return;
+    }
     panel.innerHTML = ({ bible, commentaries, lexicon, notes, crossref })[S().sub]();
     wire[S().sub] && wire[S().sub](panel);
     const active = document.querySelector(`[data-sub="${S().sub}"]`);
@@ -32,7 +38,7 @@ window.StudyScreen = (function () {
     return `<div class="verse-card">
       <div class="ref"><span>${esc(v ? v.ref : BSData.formatRef(key))} · ${esc(BSApp.textVersion().abbrev)}</span>
         <button data-goto="${key}">${action || 'Open in Bible'}</button></div>
-      <p>${esc(v ? v.text : 'Not in the sample text.')}</p></div>`;
+      <p>${esc(v ? v.text : 'Not available in this version.')}</p></div>`;
   }
 
   function renderVerseText(v) {
@@ -45,25 +51,26 @@ window.StudyScreen = (function () {
   function bible() {
     const st = S();
     const ver = BSApp.version();
-    const books = BSData.chapters();
+    const tv = BSApp.textVersion().id;
+    const books = BSData.chapters(tv);
     const cur = books.find(b => b.book.id === st.book) || books[0];
+    if (!cur.chapters.includes(st.chapter)) st.chapter = 1;
     const lockNote = ver.installed ? '' :
       `<p class="fine">${esc(ver.abbrev)} is a paid add-on that isn’t installed, so the text below is KJV.</p>`;
 
     let body;
     if (st.bibleQuery.trim()) {
-      const hits = BSData.searchVerses(st.bibleQuery, BSApp.textVersion().id);
-      body = `<p class="fine">${hits.length} ${hits.length === 1 ? 'verse' : 'verses'} in the sample text</p>${BSCommands.verseList(hits, st.bibleQuery, 50)}`;
+      const hits = BSData.searchVerses(st.bibleQuery, tv);
+      body = `<p class="fine">${hits.length} ${hits.length === 1 ? 'verse' : 'verses'} in the ${esc(BSApp.textVersion().abbrev)}</p>${BSCommands.verseList(hits, st.bibleQuery, 100)}`;
     } else {
-      const verses = BSData.chapterVerses(cur.book.id, st.chapter);
-      body = `<h2 class="chapter-head">${esc(cur.book.name)} ${st.chapter}</h2>
+      const verses = BSData.chapterVerses(cur.book.id, st.chapter, tv);
+      body = `<h2 class="chapter-head">${esc(cur.localName && BSApp.textVersion().language !== 'en' ? cur.localName : cur.book.name)} ${st.chapter}</h2>
         <div class="scripture ${st.strongs ? 'strongs-on' : ''}" id="scripture">
           ${verses.map(v => `<span class="verse ${v.key === st.selectedRef ? 'sel' : ''}" data-key="${v.key}"><sup>${v.key.split('.')[2]}</sup>${renderVerseText(v)}</span>`).join('')}
-        </div>
-        <p class="fine">Sample chapter: only some verses are loaded.</p>`;
+        </div>`;
     }
 
-    const sel = BSData.getVerse(st.selectedRef);
+    const sel = BSData.getVerse(st.selectedRef, tv);
     return `
       <div class="toolbar">
         <select id="bookSel" aria-label="Book">${books.map(b => `<option value="${b.book.id}" ${b.book.id === cur.book.id ? 'selected' : ''}>${esc(b.book.name)}</option>`).join('')}</select>
@@ -111,14 +118,15 @@ window.StudyScreen = (function () {
         <p class="def">${esc(e.definition)}</p>
         <p class="src">KJV renders it</p>
         <div class="renders">${e.kjv.map(r => `<span class="chip ghost">${esc(r)}</span>`).join('')}</div>
-        <p class="src">Verses using ${e.num} (${occ.length} in sample)</p>
-        ${BSCommands.verseList(occ.map(o => o.verse), null, 50)}
+        ${e.derivation ? `<p class="fine">${esc(e.derivation)}</p>` : ''}
+        <p class="src">Verses using ${e.num} (${occ.length})</p>
+        ${BSCommands.verseList(occ.map(o => o.verse), null, 60)}
       </div>`;
     }
     const list = BSData.searchLexicon(st.lexQuery);
     return `<input class="search" id="lexSearch" type="search" placeholder="Strong’s number, word, or English (e.g. G26, logos, love)" value="${esc(st.lexQuery)}" style="margin-top:0">
-      <p class="fine">${list.length} entries · sample of Strong’s Hebrew and Greek</p>
-      ${list.map(e => BSCommands.lexCard(e, `· ${e.language}`)).join('')}`;
+      <p class="fine">${list.length} ${list.length === 1 ? 'entry' : 'entries'}${list.length > 60 ? ', showing the first 60' : ''} \u00b7 Strong\u2019s Hebrew and Greek</p>
+      ${list.slice(0, 60).map(e => BSCommands.lexCard(e, `\u00b7 ${e.language}`)).join('')}`;
   }
 
   /* ---------- Notes ---------- */
@@ -168,8 +176,8 @@ window.StudyScreen = (function () {
     return `${verseCard(key, 'Change verse')}
       <p class="src">Related passages</p>
       ${refs.length ? BSCommands.verseList(refs.map(r => r.verse).filter(Boolean), null, 50)
-        : '<p class="muted">No cross-references for this verse in the sample.</p>'}
-      <p class="fine">Source: Treasury of Scripture Knowledge (public domain, sample).</p>`;
+        : '<p class="muted">No cross-references for this verse yet. The sample list covers a few verses; a full cross-reference module comes later.</p>'}
+      <p class="fine">Source: Treasury of Scripture Knowledge (sample of a few verses).</p>`;
   }
 
   /* ---------- event wiring per panel ---------- */

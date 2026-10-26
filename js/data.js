@@ -5,83 +5,125 @@
  * screens never touch module internals.
  *
  * Module types: bible, lexicon, commentary, crossref, dictionary.
- * Licenses: "public-domain" (bundled) or "paid-addon" (locked until licensed).
+ * Licenses: open (bundled) or "paid-addon" (locked until licensed).
  *
- * Bible verse text marks Strong's numbers inline: word{G26}. The tag belongs
- * to the word directly before it.
- *
- * Everything below is SAMPLE data for the prototype: a few dozen KJV verses
- * and a handful of lexicon entries. Commentary entries are placeholder
- * summaries, not quotations from the named works.
+ * Bible and lexicon modules with a `url` load their data on demand from
+ * data/*.json (built by tools/build_data.py). KJV text marks Strong's numbers
+ * inline after the word they belong to: loved{G25}, the world{G3588 G2889}.
  */
 (function () {
   const modules = {};
 
-  const BOOKS = [
-    { id: 'Gen', name: 'Genesis', aliases: ['genesis', 'gen', 'gn'] },
-    { id: 'Deu', name: 'Deuteronomy', aliases: ['deuteronomy', 'deut', 'deu', 'dt'] },
-    { id: 'Psa', name: 'Psalms', aliases: ['psalms', 'psalm', 'psa', 'ps'] },
-    { id: 'Jhn', name: 'John', aliases: ['john', 'jn', 'jhn'] },
-    { id: 'Rom', name: 'Romans', aliases: ['romans', 'rom', 'rm'] },
-    { id: '1Co', name: '1 Corinthians', aliases: ['1 corinthians', '1corinthians', '1 cor', '1cor', 'first corinthians'] },
-    { id: 'Heb', name: 'Hebrews', aliases: ['hebrews', 'heb'] },
-    { id: '1Jn', name: '1 John', aliases: ['1 john', '1john', '1 jn', '1jn', 'first john'] },
+  const BOOK_LIST = [
+    ['Gen', 'Genesis', 'gen gn'], ['Exo', 'Exodus', 'ex exod'], ['Lev', 'Leviticus', 'lv'], ['Num', 'Numbers', 'nm nu'],
+    ['Deu', 'Deuteronomy', 'deut dt'], ['Jos', 'Joshua', 'josh'], ['Jdg', 'Judges', 'judg jg'], ['Rut', 'Ruth', 'ru'],
+    ['1Sa', '1 Samuel', '1 sam'], ['2Sa', '2 Samuel', '2 sam'], ['1Ki', '1 Kings', '1 kgs'], ['2Ki', '2 Kings', '2 kgs'],
+    ['1Ch', '1 Chronicles', '1 chron'], ['2Ch', '2 Chronicles', '2 chron'], ['Ezr', 'Ezra', ''], ['Neh', 'Nehemiah', ''],
+    ['Est', 'Esther', 'esth'], ['Job', 'Job', ''], ['Psa', 'Psalms', 'psalm ps pss'], ['Pro', 'Proverbs', 'prov pr'],
+    ['Ecc', 'Ecclesiastes', 'eccl qoh'], ['Sng', 'Song of Solomon', 'song of songs song sos'], ['Isa', 'Isaiah', 'is'],
+    ['Jer', 'Jeremiah', 'jer'], ['Lam', 'Lamentations', ''], ['Ezk', 'Ezekiel', 'ezek eze'], ['Dan', 'Daniel', 'dn'],
+    ['Hos', 'Hosea', ''], ['Jol', 'Joel', 'jl'], ['Amo', 'Amos', 'am'], ['Oba', 'Obadiah', 'obad'], ['Jon', 'Jonah', 'jnh'],
+    ['Mic', 'Micah', ''], ['Nam', 'Nahum', 'nah'], ['Hab', 'Habakkuk', ''], ['Zep', 'Zephaniah', 'zeph'], ['Hag', 'Haggai', ''],
+    ['Zec', 'Zechariah', 'zech'], ['Mal', 'Malachi', ''], ['Mat', 'Matthew', 'matt mt'], ['Mrk', 'Mark', 'mk mar'],
+    ['Luk', 'Luke', 'lk'], ['Jhn', 'John', 'jn joh'], ['Act', 'Acts', ''], ['Rom', 'Romans', 'rm'],
+    ['1Co', '1 Corinthians', '1 cor'], ['2Co', '2 Corinthians', '2 cor'], ['Gal', 'Galatians', ''], ['Eph', 'Ephesians', ''],
+    ['Php', 'Philippians', 'phil'], ['Col', 'Colossians', ''], ['1Th', '1 Thessalonians', '1 thess'], ['2Th', '2 Thessalonians', '2 thess'],
+    ['1Ti', '1 Timothy', '1 tim'], ['2Ti', '2 Timothy', '2 tim'], ['Tit', 'Titus', ''], ['Phm', 'Philemon', 'philem'],
+    ['Heb', 'Hebrews', ''], ['Jas', 'James', 'jam jm'], ['1Pe', '1 Peter', '1 pet'], ['2Pe', '2 Peter', '2 pet'],
+    ['1Jn', '1 John', '1 jn'], ['2Jn', '2 John', '2 jn'], ['3Jn', '3 John', '3 jn'], ['Jud', 'Jude', ''], ['Rev', 'Revelation', 'rev rv revelations'],
   ];
+  const ORDINALS = { first: '1', second: '2', third: '3', i: '1', ii: '2', iii: '3' };
 
-  function registerModule(mod) {
-    modules[mod.id] = mod;
+  const BOOKS = BOOK_LIST.map(([id, name, extra], i) => {
+    const n = name.toLowerCase();
+    const aliases = new Set([n, n.replace(/ /g, ''), id.toLowerCase(), n.slice(0, 3)]);
+    extra.split(' ').filter(Boolean).forEach(a => { aliases.add(a); aliases.add(a.replace(/ /g, '')); });
+    return { id, name, testament: i < 39 ? 'OT' : 'NT', index: i, aliases: [...aliases] };
+  });
+  const BOOK_INDEX = Object.fromEntries(BOOKS.map(b => [b.id, b]));
+
+  function registerModule(mod) { modules[mod.id] = mod; }
+  function listModules(type) { return Object.values(modules).filter(m => !type || m.type === type); }
+  function getModule(id) { return modules[id] || null; }
+
+  /* ---------- loading ---------- */
+
+  const loading = {};
+  function load(id) {
+    const m = modules[id];
+    if (!m) return Promise.reject(new Error('Unknown module ' + id));
+    if (m.loaded || !m.url) return Promise.resolve(m);
+    if (!loading[id]) {
+      loading[id] = fetch(m.url).then(r => {
+        if (!r.ok) throw new Error(`Couldn’t load ${m.abbrev || m.name} (${r.status})`);
+        return r.json();
+      }).then(json => {
+        if (m.type === 'bible') indexBible(m, json); else m.entries = json;
+        m.loaded = true;
+        return m;
+      }).finally(() => { delete loading[id]; });
+    }
+    return loading[id];
   }
 
-  function listModules(type) {
-    return Object.values(modules).filter(m => !type || m.type === type);
+  function indexBible(m, json) {
+    m.verses = {};
+    m.order = [];
+    m.index = [];
+    json.books.forEach(b => {
+      m.index.push({ book: BOOK_INDEX[b.id], localName: b.localName, chapters: b.chapters.map((_, i) => i + 1) });
+      b.chapters.forEach((verses, ci) => verses.forEach((text, vi) => {
+        const key = `${b.id}.${ci + 1}.${vi + 1}`;
+        m.verses[key] = text;
+        m.order.push(key);
+      }));
+    });
   }
 
-  function getModule(id) {
-    return modules[id] || null;
-  }
+  function isLoaded(id) { const m = modules[id]; return !!m && (m.loaded || !m.url); }
 
   /* ---------- references ---------- */
 
-  function bookById(id) {
-    return BOOKS.find(b => b.id === id);
-  }
-
-  function refKey(book, ch, v) {
-    return `${book}.${ch}.${v}`;
-  }
+  function bookById(id) { return BOOK_INDEX[id]; }
+  function refKey(book, ch, v) { return `${book}.${ch}.${v}`; }
 
   function formatRef(key) {
     const [b, c, v] = key.split('.');
-    const book = bookById(b);
+    const book = BOOK_INDEX[b];
     return `${book ? book.name : b} ${c}:${v}`;
   }
 
-  // "John 3:16", "1 John 4 8", "romans 5.8"
+  // "John 3:16", "1 John 4 8", "first john 4:8", "romans 5.8"
   function parseRef(text) {
-    const m = String(text).trim().toLowerCase()
-      .match(/^((?:[123]|first|second|third)?\s*[a-z]+)\.?\s+(\d+)\s*[:.\s]\s*(\d+)/);
+    const m = String(text).trim().toLowerCase().replace(/^(first|second|third|iii|ii|i)\s+/, (_, o) => ORDINALS[o] + ' ')
+      .match(/^((?:[123]\s*)?[a-z]+(?: of [a-z]+)?)\.?\s+(\d+)\s*[:.\s]\s*(\d+)/);
     if (!m) return null;
     const name = m[1].replace(/\s+/g, ' ').trim();
-    const book = BOOKS.find(b => b.aliases.includes(name) || b.aliases.includes(name.replace(' ', '')));
-    if (!book) return null;
-    return refKey(book.id, +m[2], +m[3]);
+    const book = BOOKS.find(b => b.aliases.includes(name) || b.aliases.includes(name.replace(/ /g, '')));
+    return book ? refKey(book.id, +m[2], +m[3]) : null;
   }
 
   /* ---------- verse text ---------- */
 
-  const TAG_RE = /([^\s{}]+?)\{([GH]\d+)\}/g;
+  const TAG_RE = /([^\s{}]+?)\{([GH]\d+(?: [GH]\d+)*)\}/g;
 
-  function plainText(tagged) {
-    return tagged.replace(/\{[GH]\d+\}/g, '');
+  function plainText(tagged) { return tagged.replace(/\{[GH][\d ]+[GH\d ]*\}/g, ''); }
+
+  // Main Strong's number of a tag: skip the Greek article (G3588) and the Hebrew
+  // object marker (H853) when a word carries a real number as well.
+  function primary(nums) {
+    const list = nums.split(' ');
+    const main = list.filter(n => n !== 'G3588' && n !== 'H853');
+    return main.length ? main[main.length - 1] : list[list.length - 1];
   }
 
-  // Splits tagged text into [{text, strongs?}] tokens for rendering.
+  // Splits tagged text into [{text, strongs?, all?}] tokens for rendering.
   function tokens(tagged) {
     const out = [];
     let last = 0;
-    tagged.replace(TAG_RE, (match, word, num, idx) => {
+    tagged.replace(TAG_RE, (match, word, nums, idx) => {
       if (idx > last) out.push({ text: tagged.slice(last, idx) });
-      out.push({ text: word, strongs: num });
+      out.push({ text: word, strongs: primary(nums), all: nums.split(' ') });
       last = idx + match.length;
     });
     if (last < tagged.length) out.push({ text: tagged.slice(last) });
@@ -89,58 +131,51 @@
   }
 
   function bible(versionId) {
-    const m = modules[versionId];
-    if (m && m.type === 'bible' && m.installed) return m;
-    return modules.kjv; // locked or unknown versions fall back to the core text
+    let m = modules[versionId];
+    if (m && m.source) m = modules[m.source]; // KJV+ shows the KJV text with its numbers visible
+    if (m && m.type === 'bible' && m.installed && isLoaded(m.id)) return m;
+    return modules.kjv;
   }
 
   function getVerse(key, versionId = 'kjv') {
     const m = bible(versionId);
-    const raw = m.verses[key];
+    const raw = m.verses && m.verses[key];
     if (raw == null) return null;
     return { key, ref: formatRef(key), tagged: raw, text: plainText(raw), version: m.abbrev };
   }
 
-  function chapters(versionId = 'kjv') {
-    const m = bible(versionId);
-    const map = new Map();
-    Object.keys(m.verses).forEach(k => {
-      const [b, c] = k.split('.');
-      if (!map.has(b)) map.set(b, new Set());
-      map.get(b).add(+c);
-    });
-    return BOOKS.filter(b => map.has(b.id)).map(b => ({ book: b, chapters: [...map.get(b.id)].sort((x, y) => x - y) }));
-  }
+  function chapters(versionId = 'kjv') { return bible(versionId).index; }
 
   function chapterVerses(book, ch, versionId = 'kjv') {
     const m = bible(versionId);
-    return Object.keys(m.verses)
-      .filter(k => { const [b, c] = k.split('.'); return b === book && +c === ch; })
-      .sort((a, z) => +a.split('.')[2] - +z.split('.')[2])
-      .map(k => getVerse(k, versionId));
+    const out = [];
+    for (let v = 1; m.verses[refKey(book, ch, v)] != null; v++) out.push(getVerse(refKey(book, ch, v), m.id));
+    return out;
   }
 
   function allVerses(versionId = 'kjv') {
     const m = bible(versionId);
-    const order = BOOKS.map(b => b.id);
-    return Object.keys(m.verses)
-      .sort((a, z) => {
-        const [ab, ac, av] = a.split('.'); const [zb, zc, zv] = z.split('.');
-        return order.indexOf(ab) - order.indexOf(zb) || ac - zc || av - zv;
-      })
-      .map(k => getVerse(k, versionId));
+    return m.order.map(k => getVerse(k, m.id));
   }
 
-  function escapeRe(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // scope: { testament: 'OT' | 'NT', book: 'Jhn' } or nothing for the whole Bible
+  function inScope(key, scope) {
+    if (!scope) return true;
+    const b = key.slice(0, key.indexOf('.'));
+    if (scope.book) return b === scope.book;
+    if (scope.testament) return BOOK_INDEX[b].testament === scope.testament;
+    return true;
   }
+
+  function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
   // Exact-word occurrences ("love" does not count "loved").
-  function countWord(word, versionId = 'kjv') {
-    const re = new RegExp(`\\b${escapeRe(word)}\\b`, 'gi');
+  function countWord(word, versionId = 'kjv', scope) {
+    const re = new RegExp(`(^|[^\\p{L}])${escapeRe(word)}(?![\\p{L}])`, 'giu');
     let total = 0;
     const verses = [];
     allVerses(versionId).forEach(v => {
+      if (!inScope(v.key, scope)) return;
       const n = (v.text.match(re) || []).length;
       if (n) { total += n; verses.push(v); }
     });
@@ -148,33 +183,43 @@
   }
 
   // Verses containing the word or a form starting with it (love, loved, loveth).
-  function searchVerses(query, versionId = 'kjv') {
+  function searchVerses(query, versionId = 'kjv', scope) {
     const q = query.trim();
     if (!q) return [];
-    const re = new RegExp(`\\b${escapeRe(q)}`, 'i');
-    return allVerses(versionId).filter(v => re.test(v.text));
+    const re = new RegExp(`(^|[^\\p{L}])${escapeRe(q)}`, 'iu');
+    return allVerses(versionId).filter(v => inScope(v.key, scope) && re.test(v.text));
   }
 
   /* ---------- Strong's ---------- */
 
   function lexiconEntry(num) {
     for (const m of listModules('lexicon')) {
-      if (m.entries[num]) return { num, language: num[0] === 'G' ? 'Greek' : 'Hebrew', ...m.entries[num] };
+      const e = m.entries && m.entries[num];
+      if (!e) continue;
+      const [lemma, translit, pron, definition, kjvDef, derivation] = e;
+      return {
+        num, language: num[0] === 'G' ? 'Greek' : 'Hebrew', lemma, translit, pron, definition, derivation,
+        kjvDef, kjv: kjvDef.replace(/\.$/, '').split(/,\s*/).map(s => s.trim()).filter(Boolean),
+      };
     }
     return null;
   }
 
   function lexiconEntries() {
-    return listModules('lexicon').flatMap(m => Object.keys(m.entries)).map(lexiconEntry)
+    return listModules('lexicon').flatMap(m => Object.keys(m.entries || {})).map(lexiconEntry)
       .sort((a, b) => a.num[0].localeCompare(b.num[0]) || +a.num.slice(1) - +b.num.slice(1));
   }
 
-  // Every verse that uses a Strong's number, with the English word KJV used there.
-  function occurrences(num) {
+  // Every verse that uses a Strong's number, with the English words KJV used there.
+  function occurrences(num, scope) {
     const out = [];
-    allVerses('kjv').forEach(v => {
-      const words = tokens(v.tagged).filter(t => t.strongs === num).map(t => t.text);
-      if (words.length) out.push({ verse: v, words });
+    const m = modules.kjv;
+    const needle = new RegExp(`[{ ]${num}[} ]`);
+    m.order.forEach(key => {
+      const raw = m.verses[key];
+      if (!needle.test(raw) || !inScope(key, scope)) return;
+      const words = tokens(raw).filter(t => t.all && t.all.includes(num)).map(t => t.text);
+      out.push({ verse: getVerse(key), words });
     });
     return out;
   }
@@ -183,32 +228,37 @@
   function originalsFor(word, language) {
     const w = word.toLowerCase();
     const found = new Map();
-    allVerses('kjv').forEach(v => {
-      tokens(v.tagged).forEach(t => {
+    const m = modules.kjv;
+    const quick = new RegExp(escapeRe(w), 'i');
+    m.order.forEach(key => {
+      const raw = m.verses[key];
+      if (!quick.test(raw)) return;
+      tokens(raw).forEach(t => {
         if (!t.strongs) return;
         if (language && (language === 'greek') !== (t.strongs[0] === 'G')) return;
         const tw = t.text.toLowerCase().replace(/[^a-z']/g, '');
         if (tw === w || (tw.startsWith(w) && tw.length - w.length <= 3)) {
           const f = found.get(t.strongs) || { entry: lexiconEntry(t.strongs), forms: new Set(), verses: new Set() };
           f.forms.add(tw);
-          f.verses.add(v.key);
+          f.verses.add(key);
           found.set(t.strongs, f);
         }
       });
     });
     return [...found.values()].filter(f => f.entry)
-      .map(f => ({ entry: f.entry, forms: [...f.forms], verseCount: f.verses.size }));
+      .map(f => ({ entry: f.entry, forms: [...f.forms], verseCount: f.verses.size }))
+      .sort((a, b) => b.verseCount - a.verseCount);
   }
 
   function searchLexicon(query) {
     const q = query.trim().toLowerCase();
-    if (!q) return lexiconEntries();
-    return lexiconEntries().filter(e =>
-      e.num.toLowerCase() === q ||
-      e.translit.toLowerCase().includes(q) ||
-      e.lemma.includes(query.trim()) ||
-      e.kjv.some(r => r.toLowerCase().startsWith(q)) ||
-      e.definition.toLowerCase().includes(q));
+    const all = lexiconEntries();
+    if (!q) return all;
+    if (/^[gh]\d+$/.test(q)) return all.filter(e => e.num.toLowerCase() === q);
+    const plain = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return all.filter(e =>
+      plain(e.translit).includes(plain(q)) || e.lemma.includes(query.trim()) ||
+      e.kjv.some(r => r.toLowerCase().replace(/[^a-z ]/g, '').split(' ').includes(q)));
   }
 
   /* ---------- commentary, cross-refs, dictionary ---------- */
@@ -229,99 +279,49 @@
     const w = word.toLowerCase();
     const dict = listModules('dictionary').flatMap(m =>
       Object.entries(m.entries).filter(([k]) => k.toLowerCase() === w).map(([k, text]) => ({ source: m.name, term: k, text })));
-    const lex = lexiconEntries().filter(e => e.kjv.some(r => r.toLowerCase() === w || r.toLowerCase().startsWith(w + ' ')));
+    const lex = originalsFor(w).map(f => f.entry).slice(0, 6);
     return { dict, lex };
   }
 
   window.BSData = {
-    BOOKS, registerModule, listModules, getModule, bookById, refKey, formatRef, parseRef,
-    tokens, plainText, getVerse, chapters, chapterVerses, allVerses, countWord, searchVerses,
+    BOOKS, registerModule, listModules, getModule, load, isLoaded, bookById, refKey, formatRef, parseRef,
+    tokens, plainText, getVerse, chapters, chapterVerses, allVerses, countWord, searchVerses, inScope,
     lexiconEntry, lexiconEntries, occurrences, originalsFor, searchLexicon,
     commentaries, crossRefs, define,
   };
 })();
 
-/* ================= SAMPLE MODULES ================= */
+/* ================= MODULES ================= */
 
 BSData.registerModule({
-  id: 'kjv', type: 'bible', abbrev: 'KJV', name: 'King James Version (with Strong’s)',
-  language: 'en', license: 'public-domain', installed: true,
-  verses: {
-    'Gen.1.1': 'In the beginning{H7225} God{H430} created{H1254} the heaven{H8064} and the earth{H776}.',
-    'Gen.1.2': 'And the earth{H776} was without form, and void; and darkness{H2822} was upon the face of the deep. And the Spirit{H7307} of God{H430} moved upon the face of the waters.',
-    'Gen.1.3': 'And God{H430} said, Let there be light{H216}: and there was light{H216}.',
-    'Deu.6.4': 'Hear, O Israel: The LORD{H3068} our God{H430} is one LORD{H3068}:',
-    'Deu.6.5': 'And thou shalt love{H157} the LORD{H3068} thy God{H430} with all thine heart{H3824}, and with all thy soul{H5315}, and with all thy might.',
-    'Psa.23.1': 'The LORD{H3068} is my shepherd{H7462}; I shall not want.',
-    'Psa.23.2': 'He maketh me to lie down in green pastures: he leadeth me beside the still waters.',
-    'Psa.23.3': 'He restoreth my soul{H5315}: he leadeth me in the paths of righteousness for his name’s sake.',
-    'Psa.23.4': 'Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me.',
-    'Jhn.1.1': 'In the beginning{G746} was the Word{G3056}, and the Word{G3056} was with God{G2316}, and the Word{G3056} was God{G2316}.',
-    'Jhn.1.2': 'The same was in the beginning{G746} with God{G2316}.',
-    'Jhn.1.3': 'All things were made by him; and without him was not any thing made that was made.',
-    'Jhn.1.4': 'In him was life{G2222}; and the life{G2222} was the light{G5457} of men.',
-    'Jhn.1.5': 'And the light{G5457} shineth in darkness{G4653}; and the darkness{G4653} comprehended it not.',
-    'Jhn.3.16': 'For God{G2316} so loved{G25} the world{G2889}, that he gave his only begotten{G3439} Son{G5207}, that whosoever believeth{G4100} in him should not perish{G622}, but have everlasting{G166} life{G2222}.',
-    'Jhn.3.17': 'For God{G2316} sent not his Son{G5207} into the world{G2889} to condemn the world{G2889}; but that the world{G2889} through him might be saved.',
-    'Jhn.15.13': 'Greater love{G26} hath no man than this, that a man lay down his life for his friends.',
-    'Rom.5.8': 'But God{G2316} commendeth his love{G26} toward us, in that, while we were yet sinners{G268}, Christ{G5547} died for us.',
-    'Rom.8.38': 'For I am persuaded, that neither death, nor life{G2222}, nor angels, nor principalities, nor powers, nor things present, nor things to come,',
-    'Rom.8.39': 'Nor height, nor depth, nor any other creature, shall be able to separate us from the love{G26} of God{G2316}, which is in Christ{G5547} Jesus our Lord.',
-    '1Co.13.4': 'Charity{G26} suffereth long, and is kind; charity{G26} envieth not; charity{G26} vaunteth not itself, is not puffed up,',
-    '1Co.13.13': 'And now abideth faith{G4102}, hope{G1680}, charity{G26}, these three; but the greatest of these is charity{G26}.',
-    'Heb.11.3': 'Through faith{G4102} we understand that the worlds were framed by the word of God{G2316}, so that things which are seen were not made of things which do appear.',
-    '1Jn.4.8': 'He that loveth{G25} not knoweth not God{G2316}; for God{G2316} is love{G26}.',
-    '1Jn.4.9': 'In this was manifested the love{G26} of God{G2316} toward us, because that God{G2316} sent his only begotten{G3439} Son{G5207} into the world{G2889}, that we might live through him.',
-    '1Jn.4.10': 'Herein is love{G26}, not that we loved{G25} God{G2316}, but that he loved{G25} us, and sent his Son{G5207} to be the propitiation{G2434} for our sins{G266}.',
-  },
+  id: 'kjv', type: 'bible', abbrev: 'KJV', name: 'King James Version (1769)', language: 'en',
+  license: 'Public domain text; Strong’s tagging from CrossWire (GPL)', installed: true, url: 'data/kjv.json',
+});
+BSData.registerModule({
+  id: 'kjvplus', type: 'bible', abbrev: 'KJV+', name: 'King James Version with Strong’s numbers', language: 'en',
+  installed: true, source: 'kjv', strongsInline: true,
+});
+BSData.registerModule({
+  id: 'rv1909', type: 'bible', abbrev: 'RV1909', name: 'Reina-Valera 1909', language: 'es',
+  license: 'Public domain', installed: true, url: 'data/rv1909.json',
+});
+BSData.registerModule({
+  id: 'martin1744', type: 'bible', abbrev: 'Martin', name: 'Bible David Martin (1744)', language: 'fr',
+  license: 'Public domain', installed: true, url: 'data/martin1744.json',
 });
 
 // Licensed translations: registered so the version button can cycle them, but locked.
+// The Reina-Valera Gómez (CC BY-NC-ND) also needs its publisher's text and permission before it can be added.
 ['ESV', 'NASB', 'NIV'].forEach(abbrev => BSData.registerModule({
   id: abbrev.toLowerCase(), type: 'bible', abbrev, name: abbrev, language: 'en',
-  license: 'paid-addon', installed: false, verses: {},
+  license: 'paid-addon', installed: false,
 }));
 
 BSData.registerModule({
-  id: 'strongs', type: 'lexicon', name: 'Strong’s Hebrew and Greek (sample)', license: 'public-domain', installed: true,
-  entries: {
-    G25: { lemma: 'ἀγαπάω', translit: 'agapaō', pron: 'ag-ap-ah’-o', definition: 'to love (in a social or moral sense).', kjv: ['love', 'loved', 'loveth', 'beloved'] },
-    G26: { lemma: 'ἀγάπη', translit: 'agapē', pron: 'ag-ah’-pay', definition: 'love, i.e. affection or benevolence; specially (plural) a love-feast.', kjv: ['love', 'charity', 'dear', 'feast of charity'] },
-    G166: { lemma: 'αἰώνιος', translit: 'aiōnios', pron: 'ahee-o’-nee-os', definition: 'perpetual (also used of past time, or past and future as well).', kjv: ['eternal', 'everlasting', 'for ever'] },
-    G266: { lemma: 'ἁμαρτία', translit: 'hamartia', pron: 'ham-ar-tee’-ah', definition: 'a sin (properly abstract); offence.', kjv: ['sin', 'sins', 'sinful', 'offence'] },
-    G268: { lemma: 'ἁμαρτωλός', translit: 'hamartōlos', pron: 'ham-ar-to-los’', definition: 'sinful, i.e. a sinner.', kjv: ['sinner', 'sinners', 'sinful'] },
-    G622: { lemma: 'ἀπόλλυμι', translit: 'apollymi', pron: 'ap-ol’-loo-mee', definition: 'to destroy fully; to perish, or lose.', kjv: ['destroy', 'die', 'lose', 'perish'] },
-    G746: { lemma: 'ἀρχή', translit: 'archē', pron: 'ar-khay’', definition: 'a commencement, or (concretely) chief (in various applications of order, time, place, or rank).', kjv: ['beginning', 'corner', 'first', 'principality', 'rule'] },
-    G1680: { lemma: 'ἐλπίς', translit: 'elpis', pron: 'el-pece’', definition: 'expectation (abstractly or concretely) or confidence.', kjv: ['faith', 'hope'] },
-    G2316: { lemma: 'θεός', translit: 'theos', pron: 'theh’-os', definition: 'a deity, especially the supreme Divinity.', kjv: ['God', 'god', 'godly'] },
-    G2222: { lemma: 'ζωή', translit: 'zōē', pron: 'dzo-ay’', definition: 'life.', kjv: ['life', 'lifetime'] },
-    G2434: { lemma: 'ἱλασμός', translit: 'hilasmos', pron: 'hil-as-mos’', definition: 'atonement, i.e. (concretely) an expiator.', kjv: ['propitiation'] },
-    G2889: { lemma: 'κόσμος', translit: 'kosmos', pron: 'kos’-mos', definition: 'orderly arrangement; by implication the world (in a wide or narrow sense).', kjv: ['adorning', 'world'] },
-    G3056: { lemma: 'λόγος', translit: 'logos', pron: 'log’-os', definition: 'something said (including the thought); by implication a topic, reasoning or motive; in John, the Divine Expression (Christ).', kjv: ['word', 'Word', 'saying', 'account', 'speech'] },
-    G3439: { lemma: 'μονογενής', translit: 'monogenēs', pron: 'mon-og-en-ace’', definition: 'only-born, i.e. sole.', kjv: ['only begotten', 'only child'] },
-    G4100: { lemma: 'πιστεύω', translit: 'pisteuō', pron: 'pist-yoo’-o', definition: 'to have faith (in, upon, or with respect to); by implication to entrust.', kjv: ['believe', 'believeth', 'commit to trust'] },
-    G4102: { lemma: 'πίστις', translit: 'pistis', pron: 'pis’-tis', definition: 'persuasion, i.e. credence; moral conviction; reliance upon Christ for salvation.', kjv: ['faith', 'assurance', 'belief'] },
-    G4653: { lemma: 'σκοτία', translit: 'skotia', pron: 'skot-ee’-ah', definition: 'dimness, obscurity.', kjv: ['dark', 'darkness'] },
-    G5207: { lemma: 'υἱός', translit: 'huios', pron: 'hwee-os’', definition: 'a son (used very widely of immediate, remote or figurative kinship).', kjv: ['son', 'Son', 'child'] },
-    G5457: { lemma: 'φῶς', translit: 'phōs', pron: 'foce', definition: 'luminousness (in the widest application, natural or artificial).', kjv: ['fire', 'light'] },
-    G5547: { lemma: 'Χριστός', translit: 'Christos', pron: 'khris-tos’', definition: 'anointed, i.e. the Messiah, an epithet of Jesus.', kjv: ['Christ'] },
-    H157: { lemma: 'אָהַב', translit: '’ahab', pron: 'aw-hab’', definition: 'to have affection for (sexually or otherwise).', kjv: ['love', 'beloved', 'friend', 'lover'] },
-    H216: { lemma: 'אוֹר', translit: '’owr', pron: 'ore', definition: 'illumination or (concretely) luminary (in every sense).', kjv: ['light', 'bright', 'day', 'morning', 'sun'] },
-    H430: { lemma: 'אֱלֹהִים', translit: '’elohiym', pron: 'el-o-heem’', definition: 'gods in the ordinary sense; but specifically used (in the plural thus) of the supreme God.', kjv: ['God', 'god', 'judges', 'mighty'] },
-    H776: { lemma: 'אֶרֶץ', translit: '’erets', pron: 'eh’-rets', definition: 'the earth (at large, or partitively a land).', kjv: ['earth', 'land', 'country', 'ground', 'world'] },
-    H1254: { lemma: 'בָּרָא', translit: 'bara’', pron: 'baw-raw’', definition: 'to create; (qualified) to cut down (a wood), select, feed (as formative processes).', kjv: ['create', 'creator', 'make'] },
-    H2822: { lemma: 'חֹשֶׁךְ', translit: 'choshek', pron: 'kho-shek’', definition: 'the dark; hence (literally) darkness; figuratively misery, destruction, death, ignorance, sorrow, wickedness.', kjv: ['dark', 'darkness', 'night', 'obscurity'] },
-    H3068: { lemma: 'יְהֹוָה', translit: 'Yehovah', pron: 'yeh-ho-vaw’', definition: '(the) self-Existent or Eternal; Jehovah, Jewish national name of God.', kjv: ['LORD', 'Jehovah', 'the Lord'] },
-    H3824: { lemma: 'לֵבָב', translit: 'lebab', pron: 'lay-bawb’', definition: 'the heart (as the most interior organ); used also like lev.', kjv: ['heart', 'consider', 'mind', 'understanding'] },
-    H5315: { lemma: 'נֶפֶשׁ', translit: 'nephesh', pron: 'neh’-fesh', definition: 'properly a breathing creature, i.e. animal or (abstractly) vitality.', kjv: ['soul', 'life', 'person', 'mind', 'heart'] },
-    H7225: { lemma: 'רֵאשִׁית', translit: 're’shiyth', pron: 'ray-sheeth’', definition: 'the first, in place, time, order or rank (specifically a firstfruit).', kjv: ['beginning', 'chief', 'first', 'firstfruits'] },
-    H7307: { lemma: 'רוּחַ', translit: 'ruwach', pron: 'roo’-akh', definition: 'wind; by resemblance breath; figuratively life, anger; by extension a spirit.', kjv: ['spirit', 'Spirit', 'wind', 'breath', 'mind'] },
-    H7462: { lemma: 'רָעָה', translit: 'ra‘ah', pron: 'raw-aw’', definition: 'to tend a flock, i.e. pasture it; generally to rule.', kjv: ['shepherd', 'feed', 'pastor', 'herdman', 'keep'] },
-    H8064: { lemma: 'שָׁמַיִם', translit: 'shamayim', pron: 'shaw-mah’-yim', definition: 'the sky (as aloft; the dual perhaps alluding to the visible arch).', kjv: ['heaven', 'heavens', 'air'] },
-  },
+  id: 'strongs', type: 'lexicon', name: 'Strong’s Hebrew and Greek Dictionaries (Open Scriptures, CC-BY-SA)',
+  installed: true, url: 'data/strongs.json',
 });
 
-// Commentary placeholders. Each summary stands in for the real public-domain text.
 const PH = '[Placeholder summary. The full public-domain text loads from this module.] ';
 
 BSData.registerModule({

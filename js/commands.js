@@ -41,7 +41,7 @@
   }
 
   function verseList(verses, word, limit = 12) {
-    if (!verses.length) return '<p class="muted">No verses found in the sample text.</p>';
+    if (!verses.length) return '<p class="muted">No verses found.</p>';
     const items = verses.slice(0, limit).map(v =>
       `<li><button class="verse-link" data-goto="${v.key}"><span class="ref">${esc(v.ref)}</span><span class="vt">${mark(v.text, word)}</span></button></li>`).join('');
     const more = verses.length > limit ? `<p class="muted">and ${verses.length - limit} more</p>` : '';
@@ -56,7 +56,7 @@
     </button>`;
   }
 
-  const SAMPLE_NOTE = '<p class="fine">Counts cover the sample verses in this prototype. The full KJV module gives whole-Bible numbers.</p>';
+  const SAMPLE_NOTE = '';
 
   const handlers = {
     count([, word], ctx) {
@@ -77,17 +77,18 @@
         html: list.length
           ? list.map(f => lexCard(f.entry, `· ${f.verseCount} ${f.verseCount === 1 ? 'verse' : 'verses'} · KJV: ${f.forms.map(esc).join(', ')}`)).join('')
             + '<p class="fine">Tap an entry to open it in the Lexicon.</p>'
-          : `<p class="muted">No ${L} word is tagged with “${esc(word)}” in the sample text.</p>`,
+          : `<p class="muted">No ${L} word is tagged with “${esc(word)}” in the KJV.</p>`,
       };
     },
 
     whereOriginal([, word, lang]) {
       const list = BSData.originalsFor(word, lang.toLowerCase());
       const L = lang[0].toUpperCase() + lang.slice(1).toLowerCase();
-      if (!list.length) return { kind: 'local', title: `“${word}” in ${L}`, html: `<p class="muted">No ${L} word for “${esc(word)}” in the sample text.</p>` };
+      if (!list.length) return { kind: 'local', title: `“${word}” in ${L}`, html: `<p class="muted">No ${L} word for “${esc(word)}” in the KJV.</p>` };
       const html = list.map(f => {
         const occ = BSData.occurrences(f.entry.num);
-        const renders = [...new Set(occ.flatMap(o => o.words.map(w => w.toLowerCase().replace(/[^a-z]/g, ''))))];
+        const SMALL = new Set(['the', 'a', 'an', 'of', 'and', 'to', 'in', 'that', 'for', 'with']);
+        const renders = [...new Set(occ.flatMap(o => o.words.map(w => w.toLowerCase().replace(/[^a-z]/g, ''))))].filter(w => w && !SMALL.has(w));
         return `${lexCard(f.entry, `· rendered ${renders.map(r => `“${esc(r)}”`).join(', ')}`)}
           ${verseList(occ.map(o => o.verse), null, 8)}`;
       }).join('');
@@ -99,7 +100,7 @@
 
     find([, word], ctx) {
       const verses = BSData.searchVerses(word, ctx.version);
-      return { kind: 'local', title: `Verses with “${word}”`, html: `<p class="muted">${verses.length} in the sample text, including other forms of the word.</p>${verseList(verses, word, 20)}` };
+      return { kind: 'local', title: `Verses with “${word}”`, html: `<p class="muted">${verses.length} in the ${esc(ctx.versionAbbrev)}, including other forms of the word.</p>${verseList(verses, word, 20)}` };
     },
 
     define([, word]) {
@@ -162,6 +163,9 @@
   }
 
   function run(text, ctx) {
+    if (!BSApp.state.dataReady && !/(copy|save|add|put) .*notes/i.test(text)) {
+      return { route: 'loading', kind: 'error', title: 'Still loading the Bible', html: '<p>The full Bible text is still downloading. Try again in a moment.</p>' };
+    }
     const clean = text.trim().replace(/[?.!]+$/, '');
     for (const r of ROUTES) {
       const m = clean.match(r.re);

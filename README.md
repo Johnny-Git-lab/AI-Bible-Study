@@ -10,11 +10,11 @@ A mobile-first web prototype of the Listen and Study screens. Plain HTML, CSS an
 - A Listen/Study switch at the top replaces the bottom tab bar. "+ Add" opens: paste a YouTube link, upload from device, record (coming later), or use the sample sermon.
 - Tap the transcript line to pause and open the full transcript, larger. Tap lines to pick them, or press and hold to select words, then Copy or Send to note (new note or an existing topic). Voice: "Show the transcript".
 - YouTube links are accepted and stored, but this preview can't play YouTube. The real app would use YouTube's embedded player.
-- Small round buttons: Version cycle (KJV, then ESV, NASB and NIV shown as locked paid add-ons), Language cycle (English, Spanish, French interface text), and a reserved button.
+- Small round buttons: Version cycle (KJV, KJV+, Reina-Valera 1909, Martin 1744, then ESV, NASB and NIV shown as locked paid add-ons), Language cycle (English, Spanish, French interface text), and a reserved button.
 - Large Play/Pause, a reserved button on the left, and Command on the right.
 - Placeholder sermon ("God So Loved the World") with a silent simulated clock, a scrubber, and a timestamped transcript whose verse chips open the Study view.
 - "Load sermon audio" plays a real audio file from the device. Transcription is not wired yet.
-- Command pauses the audio and opens a simulated voice card. Type a question or tap an example. Results appear as a card over the middle of the screen, so Play and Command stay reachable. Pressing Play closes the card and resumes at the same position.
+- Command pauses the audio and listens using the phone's built-in speech recognition (Safari on iPhone, Chrome on Android). Typing and example phrases remain as a fallback. Results appear as a card over the middle of the screen, so Play and Command stay reachable. Pressing Play closes the card and resumes at the same position.
 - Supported commands: word count, Greek or Hebrew for a word, where a word appears in Greek or Hebrew, find verses, define, copy to notes, and cross-references. Anything else is treated as interpretive and shows what would be sent to Claude.
 - Keyboard stand-in for the future device (not shown on screen): `1` `2` `3` top row, `Z` left, `Space` play, `C` command.
 
@@ -38,12 +38,20 @@ A mobile-first web prototype of the Listen and Study screens. Plain HTML, CSS an
 | `js/listen.js`, `js/study.js` | The two screens. |
 | `js/i18n.js` | Interface strings for English, Spanish and French. |
 
-## Placeholder data
+## Bible and lexicon data
 
-- About 25 KJV verses from Genesis, Deuteronomy, Psalms, John, Romans, 1 Corinthians, Hebrews and 1 John, tagged with Strong's numbers.
-- About 35 Strong's entries. Definitions are short Strong's-style summaries.
-- Commentary entries are placeholder summaries, not quotations from Matthew Henry, Barnes, Clarke or JFB. The real public-domain texts replace them when the modules load.
-- Counts and search results cover the sample verses only.
+Built by `tools/build_data.py` into `data/` (run it again to rebuild):
+
+| File | Contents | License |
+|---|---|---|
+| `data/kjv.json` | Full KJV (1769), every word tagged with Strong's numbers. Used for both KJV and KJV+. | Text public domain; Strong's tagging from the CrossWire KJV module (GPL) |
+| `data/rv1909.json` | Reina-Valera 1909 (Spanish) | Public domain |
+| `data/martin1744.json` | Bible David Martin 1744 (French, Textus Receptus) | Public domain |
+| `data/strongs.json` | Strong's Greek and Hebrew dictionaries, 14,197 entries | Open Scriptures, CC-BY-SA |
+
+Before a paid release, review the GPL tagging and CC-BY-SA lexicon terms. The Reina-Valera Gómez is CC BY-NC-ND and its text isn't openly downloadable, so it needs the publisher's text and permission.
+
+Still sample data: commentary entries (placeholder summaries, not quotations), cross-references (a few verses), and the Smith's dictionary entries.
 
 ## Open decisions (left as placeholders)
 
@@ -58,4 +66,4 @@ Also undecided: whether the Language button should change only the interface, or
 
 ## Not in this prototype
 
-Real speech recognition, transcription, the Claude API, the transcript highlight-to-verse flow, "Organize by topic", split view, and the full Bible and lexicon data.
+Transcription, the Claude API, the transcript highlight-to-verse flow, "Organize by topic", split view, full commentaries, and cross-references.
