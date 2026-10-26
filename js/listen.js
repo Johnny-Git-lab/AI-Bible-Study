@@ -85,7 +85,9 @@ window.ListenScreen = (function () {
   }
 
   function mount(html) {
+    const kind = sheet; // callers set the sheet kind first; closing the old card must not clear it
     closeSheet();
+    sheet = kind;
     const el = document.createElement('div');
     el.className = 'card-sheet';
     el.id = 'sheet';
@@ -113,8 +115,9 @@ window.ListenScreen = (function () {
         <button class="x" data-close aria-label="${esc(BSi18n.t('close'))}">${X}</button>
       </div>
       <div class="sheet-body">
-        <div class="listening"><div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
-          <span class="sim-note">Voice is simulated. Type a question or tap one below.</span></div>
+        <div class="listening" id="listening"><div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="sim-note" id="micNote"></span>
+          <button class="btn quiet mic-again" id="micAgain" type="button" hidden>Speak again</button></div>
         <form class="ask-row" id="askForm">
           <input id="askInput" type="text" autocomplete="off" placeholder="Show me the Greek for love" aria-label="Command">
           <button class="btn" type="submit">${esc(BSi18n.t('ask'))}</button>
@@ -126,9 +129,46 @@ window.ListenScreen = (function () {
       const v = el.querySelector('#askInput').value.trim();
       if (v) submit(v);
     });
-    el.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => simulateSpeech(b.dataset.ex)));
-    setTimeout(() => { const i = el.querySelector('#askInput'); if (i && window.matchMedia('(hover: hover)').matches) i.focus(); }, 50);
+    el.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => { BSSpeech.stop(); simulateSpeech(b.dataset.ex); }));
+    el.querySelector('#askInput').addEventListener('focus', () => { BSSpeech.stop(); setMic('off', 'Type your question.'); });
+    el.querySelector('#micAgain').addEventListener('click', listen);
     render();
+    // Must start inside the tap that opened Command, or mobile browsers refuse the microphone.
+    if (BSSpeech.available()) listen();
+    else setMic('off', 'Voice isn\u2019t available in this browser. Type a question or tap one below.');
+  }
+
+  function setMic(state, note) {
+    const box = $('#listening');
+    if (!box) return;
+    box.classList.toggle('on', state === 'on');
+    $('#micNote').textContent = note;
+    $('#micAgain').hidden = state === 'on' || !BSSpeech.available();
+  }
+
+  function listen() {
+    const input = $('#askInput');
+    if (!input) return;
+    input.value = '';
+    setMic('on', 'Speak now\u2026');
+    let failed = false;
+    BSSpeech.start({
+      onText: text => { if ($('#askInput')) $('#askInput').value = text; },
+      onEnd: text => {
+        if (sheet !== 'input' || failed) return;
+        if (text) submit(text);
+        else setMic('off', 'I didn\u2019t catch that. Tap Speak again, or type below.');
+      },
+      onError: code => {
+        failed = true;
+        if (sheet !== 'input') return;
+        const msg = code === 'not-allowed' || code === 'service-not-allowed'
+          ? 'Microphone access is off. Allow it for this site in Settings, or type below.'
+          : code === 'no-speech' ? 'I didn\u2019t hear anything. Tap Speak again, or type below.'
+          : 'Voice input stopped. Tap Speak again, or type below.';
+        setMic('off', msg);
+      },
+    });
   }
 
   // Types the phrase into the box as if it were being recognised, then submits.
@@ -146,6 +186,7 @@ window.ListenScreen = (function () {
   }
 
   function submit(text) {
+    BSSpeech.stop();
     if (/^(?:show|open)(?: me)?(?: the)? transcript/i.test(text.trim())) { openTranscript(); return; }
     const r = BSCommands.run(text, ctx());
     if (r.route === 'capture') BSApp.toast('Captured to Notes.');
@@ -168,6 +209,7 @@ window.ListenScreen = (function () {
   }
 
   function closeSheet() {
+    BSSpeech.stop();
     const el = $('#sheet');
     if (el) el.remove();
     sheet = null;

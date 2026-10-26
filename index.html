@@ -185,7 +185,9 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 
 .listening { display: flex; align-items: center; gap: 12px; padding: 8px 0 12px; }
 .wave { display: flex; gap: 3px; align-items: center; height: 28px; }
-.wave i { width: 4px; border-radius: 2px; background: var(--accent); animation: wave 1s ease-in-out infinite; height: 30%; }
+.wave i { width: 4px; border-radius: 2px; background: var(--line); height: 30%; }
+.listening.on .wave i { background: var(--accent); animation: wave 1s ease-in-out infinite; }
+.mic-again { margin-left: auto; padding: 6px 12px; font-size: 13px; flex: none; }
 .wave i:nth-child(2) { animation-delay: .1s } .wave i:nth-child(3) { animation-delay: .2s } .wave i:nth-child(4) { animation-delay: .3s } .wave i:nth-child(5) { animation-delay: .4s }
 @keyframes wave { 50% { height: 100%; } }
 .sim-note { font-size: 12px; color: var(--muted); }
@@ -401,6 +403,7 @@ select, .search {
 <script src="js/player.js"></script>
 <script src="js/notes.js"></script>
 <script src="js/commands.js"></script>
+<script src="js/speech.js"></script>
 <script src="js/listen.js"></script>
 <script src="js/study.js"></script>
 <script src="js/app.js"></script>
