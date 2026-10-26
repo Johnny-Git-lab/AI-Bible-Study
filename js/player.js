@@ -209,9 +209,12 @@
   let utterance = null;
   let onChapterEnd = null;
 
+  // Returns true if something was cut off. Safari drops a speak() that comes right after cancel(),
+  // so only cancel when the voice is actually busy.
   function stopSpeaking() {
     if (utterance) { utterance.onend = null; utterance = null; }
-    if (synth) synth.cancel();
+    if (synth && (synth.speaking || synth.pending)) { synth.cancel(); return true; }
+    return false;
   }
 
   function voiceFor(lang) {
@@ -222,7 +225,7 @@
   }
 
   function speakVerse() {
-    stopSpeaking();
+    const interrupted = stopSpeaking();
     if (!synth) { playing = false; clearInterval(timer); emit(); return; }
     const i = Math.floor(position);
     const seg = sermon.transcript[i];
@@ -239,7 +242,9 @@
       else pause();
     };
     utterance = u;
-    synth.speak(u);
+    // The first speak() must happen inside the tap, or iPhones stay silent.
+    if (interrupted) setTimeout(() => { if (utterance === u) synth.speak(u); }, 60);
+    else synth.speak(u);
   }
 
   // verses: [{ key, text }] for one chapter

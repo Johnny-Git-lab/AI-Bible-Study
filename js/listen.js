@@ -442,7 +442,9 @@ window.ListenScreen = (function () {
     el.querySelectorAll('[data-book]').forEach(b => b.addEventListener('click', () => openBiblePicker(b.dataset.book)));
     el.querySelectorAll('[data-chapter]').forEach(b => b.addEventListener('click', () => {
       closeSheet();
+      // Start reading right away; this tap is what lets the phone speak.
       startBible(entry.book.id, +b.dataset.chapter);
+      BSPlayer.play();
     }));
   }
 
