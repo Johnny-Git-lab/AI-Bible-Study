@@ -141,6 +141,8 @@ def build_strongs(greek, hebrew, out):
     for num, e in load_js_dict(hebrew).items():
         lex[num] = [e.get('lemma', ''), e.get('xlit', ''), e.get('pron', ''), (e.get('strongs_def') or '').strip(),
                     (e.get('kjv_def') or '').strip(), (e.get('derivation') or '').strip()]
+    # One source entry (H7578) carries a stray U+FFFD; drop it.
+    lex = {k: [f.replace('\ufffd', '').strip() for f in v] for k, v in lex.items()}
     json.dump(lex, open(out, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print('wrote', out, os.path.getsize(out) // 1024, 'KB', len(lex), 'entries')
 
