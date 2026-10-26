@@ -10,6 +10,7 @@ A mobile-first web prototype of the Listen and Study screens. Plain HTML, CSS an
 - A Listen/Study switch at the top replaces the bottom tab bar. "+ Add" opens: paste a YouTube link, upload from device, record (coming later), or use the sample sermon.
 - Tap the transcript line to pause and open the full transcript, larger. Tap lines to pick them, or press and hold to select words, then Copy or Send to note (new note or an existing topic). Voice: "Show the transcript".
 - YouTube links are accepted and stored, but this preview can't play YouTube. The real app would use YouTube's embedded player.
+- Audio Bible ("+ Add" > Audio Bible): reads the chosen version aloud with the phone's voice, verse by verse. A controller under the verse has previous/next book, previous/next chapter, and a chapter/book picker; the bar jumps by verse, chapters advance on their own, and the Study tab follows along on the verse being read. Human narration (Faith Comes By Hearing, Bible Brain API) is planned.
 - Small round buttons: Version cycle (KJV, KJV+, Reina-Valera 1909, Martin 1744, then ESV, NASB and NIV shown as locked paid add-ons), Language cycle (English, Spanish, French interface text), and a reserved button.
 - Large Play/Pause, a reserved button on the left, and Command on the right.
 - Placeholder sermon ("God So Loved the World") with a silent simulated clock, a scrubber, and a timestamped transcript whose verse chips open the Study view.

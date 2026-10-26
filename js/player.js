@@ -54,7 +54,9 @@
 
   function tick() {
     const now = performance.now();
-    if (source === 'youtube' && ytLive) {
+    if (source === 'bible') {
+      // position is the verse index; the reader advances it as each verse finishes
+    } else if (source === 'youtube' && ytLive) {
       position = yt.getCurrentTime() || 0;
     } else if (source !== 'file') {
       position = Math.min(sermon.duration, position + (now - lastTick) / 1000);
@@ -73,6 +75,7 @@
     lastTick = performance.now();
     if (source === 'file' && audio) audio.play().catch(() => { playing = false; emit(); });
     if (source === 'youtube' && ytLive) yt.playVideo();
+    if (source === 'bible') speakVerse();
     timer = setInterval(tick, 250);
     emit();
   }
@@ -84,6 +87,7 @@
     clearInterval(timer);
     if (audio) audio.pause();
     if (source === 'youtube' && ytLive) yt.pauseVideo();
+    if (source === 'bible') stopSpeaking();
     emit();
   }
 
@@ -93,11 +97,13 @@
     position = Math.max(0, Math.min(sermon.duration, t));
     if (audio) audio.currentTime = position;
     if (source === 'youtube' && ytLive) yt.seekTo(position, true);
+    if (source === 'bible') { position = Math.min(Math.floor(position), sermon.duration - 1); if (playing) speakVerse(); }
     emit();
   }
 
   function loadFile(file) {
     pause();
+    stopSpeaking();
     stopYouTube();
     if (audio) URL.revokeObjectURL(audio.src);
     audio = new Audio(URL.createObjectURL(file));
@@ -197,8 +203,73 @@
     return sermon;
   }
 
+  /* ---------- Audio Bible: the phone's text-to-speech reads verse by verse ---------- */
+  const synth = window.speechSynthesis;
+  let bible = null;      // { book, chapter, version, lang }
+  let utterance = null;
+  let onChapterEnd = null;
+
+  function stopSpeaking() {
+    if (utterance) { utterance.onend = null; utterance = null; }
+    if (synth) synth.cancel();
+  }
+
+  function voiceFor(lang) {
+    const voices = synth ? synth.getVoices() : [];
+    const base = lang.slice(0, 2);
+    return voices.find(v => v.lang === lang && /enhanced|premium|natural/i.test(v.name))
+      || voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(base)) || null;
+  }
+
+  function speakVerse() {
+    stopSpeaking();
+    if (!synth) { playing = false; clearInterval(timer); emit(); return; }
+    const i = Math.floor(position);
+    const seg = sermon.transcript[i];
+    if (!seg) return;
+    const u = new SpeechSynthesisUtterance(seg.text);
+    u.lang = bible.lang;
+    const v = voiceFor(bible.lang);
+    if (v) u.voice = v;
+    u.rate = 0.95;
+    u.onend = () => {
+      if (utterance !== u || !playing) return;
+      if (i + 1 < sermon.duration) { position = i + 1; emit(); speakVerse(); }
+      else if (onChapterEnd) onChapterEnd(); // the screen loads the next chapter and keeps playing
+      else pause();
+    };
+    utterance = u;
+    synth.speak(u);
+  }
+
+  // verses: [{ key, text }] for one chapter
+  function loadBible({ book, bookName, chapter, version, versionName, lang, verses, startVerse = 1, keepPlaying = false }) {
+    const wasPlaying = playing && keepPlaying;
+    stopSpeaking();
+    if (playing) { playing = false; clearInterval(timer); }
+    if (audio) { audio.pause(); URL.revokeObjectURL(audio.src); audio = null; }
+    stopYouTube();
+    source = 'bible';
+    bible = { book, chapter, version, lang };
+    sermon = {
+      id: `bible-${version}-${book}-${chapter}`,
+      title: `${bookName} ${chapter}`,
+      speaker: `Audio Bible \u00b7 ${versionName}`,
+      date: '',
+      duration: verses.length,
+      bible: { book, chapter, version },
+      transcript: verses.map((v, i) => ({ t: i, text: v.text, refs: [v.key], verse: i + 1 })),
+    };
+    position = Math.max(0, Math.min(verses.length - 1, startVerse - 1));
+    emit();
+    if (wasPlaying) play();
+  }
+
+  function setChapterEndHandler(fn) { onChapterEnd = fn; }
+
   function loadSample() {
     pause();
+    stopSpeaking();
     stopYouTube();
     if (audio) { URL.revokeObjectURL(audio.src); audio = null; }
     sermon = SAMPLE_SERMON;
@@ -215,5 +286,5 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  window.BSPlayer = { play, pause, toggle, seek, loadFile, loadYouTube, youTubeId, loadSample, subscribe, state, fmt, SAMPLE_SERMON };
+  window.BSPlayer = { play, pause, toggle, seek, loadFile, loadYouTube, youTubeId, loadSample, loadBible, setChapterEndHandler, ttsAvailable: !!synth, subscribe, state, fmt, SAMPLE_SERMON };
 })();

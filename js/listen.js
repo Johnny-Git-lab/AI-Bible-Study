@@ -24,6 +24,13 @@ window.ListenScreen = (function () {
       $('#ytSize').textContent = compact ? 'Expand video' : 'Shrink video';
     });
 
+    document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
+      const [, kind, delta] = b.dataset.nav.match(/(book|ch)([+-]1)/);
+      navBible(kind, +delta);
+    }));
+    $('#biblePick').addEventListener('click', () => openBiblePicker());
+    BSPlayer.setChapterEndHandler(() => navBible('ch', 1, true));
+
     const cap = $('#caption');
     cap.addEventListener('click', openTranscript);
     cap.addEventListener('keydown', e => { if (e.key === 'Enter') openTranscript(); });
@@ -35,7 +42,7 @@ window.ListenScreen = (function () {
     screen.classList.toggle('is-playing', p.playing);
     $('#playState').textContent = BSi18n.t(p.playing ? 'nowPlaying' : 'paused');
     $('#sermonTitle').textContent = p.sermon.title;
-    $('#sermonMeta').textContent = `${p.sermon.speaker} · ${p.sermon.date}`;
+    $('#sermonMeta').textContent = [p.sermon.speaker, p.sermon.date].filter(Boolean).join(' · ');
     // SVG elements have no .hidden property, so set the attribute directly.
     $('#icoPlay').toggleAttribute('hidden', p.playing);
     $('#icoPause').toggleAttribute('hidden', !p.playing);
@@ -46,9 +53,9 @@ window.ListenScreen = (function () {
     const capKey = `${p.source}|${seg ? seg.t : ''}|${BSi18n.lang().id}`;
     if (capKey !== lastCaption) {
       lastCaption = capKey;
-      $('#caption').innerHTML = p.source !== 'sample'
+      $('#caption').innerHTML = p.source !== 'sample' && p.source !== 'bible'
         ? 'The transcript will appear here once speech-to-text is connected.'
-        : seg ? `<span class="ts">${BSPlayer.fmt(seg.t)}<span class="expand">Tap to enlarge</span></span>${esc(seg.text)}` : '';
+        : seg ? `<span class="ts">${p.source === 'bible' ? `Verse ${seg.verse}` : BSPlayer.fmt(seg.t)}<span class="expand">Tap to enlarge</span></span>${esc(seg.text)}` : '';
       $('#captionRefs').innerHTML = seg && seg.refs.length
         ? seg.refs.map(r => `<button class="chip" data-goto="${r}">${esc(BSData.formatRef(r))}</button>`).join('')
         : '';
@@ -61,18 +68,27 @@ window.ListenScreen = (function () {
       $('#tCur').textContent = BSPlayer.fmt(p.position);
     }
     $('#tDur').textContent = BSPlayer.fmt(p.duration);
+    const isBible = p.source === 'bible';
+    $('#bibleNav').hidden = !isBible;
+    if (isBible) {
+      $('#biblePickLabel').textContent = p.sermon.title;
+      if (!scrubbing) $('#tCur').textContent = `Verse ${Math.floor(p.position) + 1}`;
+      $('#tDur').textContent = `${p.duration} verses`;
+      followAlong(p);
+    }
     $('#sourceTag').textContent = {
       sample: 'Sample sermon \u00b7 placeholder audio (silent)',
       file: 'From your device',
+      bible: BSPlayer.ttsAvailable ? 'Read aloud by your phone\u2019s voice' : 'This browser can\u2019t read aloud',
       youtube: p.ytLive ? 'Playing from YouTube' : 'YouTube link \u00b7 can\u2019t play in this preview (works on the hosted site)',
     }[p.source];
     const ytOn = p.source === 'youtube' && p.ytLive;
     $('#ytBox').hidden = !ytOn;
     // A YouTube sermon has no transcript yet, so the video tile takes the caption's place.
     $('#caption').hidden = ytOn;
-    $('#captionRefs').hidden = ytOn;
+    $('#captionRefs').hidden = ytOn || isBible; // the controller already names the chapter
     $('#cmdBtn').classList.toggle('live', sheet === 'input');
-    if (sheet && sheet !== 'add') renderFoot();
+    if (sheet && sheet !== 'add' && sheet !== 'bible') renderFoot();
   }
 
   function ctx() {
@@ -242,6 +258,10 @@ window.ListenScreen = (function () {
           <span><b>Upload from device</b><span>MP3, M4A or WAV from your phone</span></span>
         </label>
         <input id="audioFile" type="file" accept="audio/*" hidden>
+        <button class="add-opt row" id="useBible">
+          <span class="opt-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4.5" height="6.5" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="6.5" rx="1.5"/></svg></span>
+          <span><b>Audio Bible</b><span>Listen chapter by chapter, with the text following along</span></span>
+        </button>
         <div class="add-opt row soon">
           <span class="opt-ico"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg></span>
           <span><b>Record a sermon</b><span>Coming later</span></span>
@@ -271,6 +291,7 @@ window.ListenScreen = (function () {
       BSApp.toast(`Loaded “${f.name}”. Press Play to start.`);
     });
     el.querySelector('#useSample').addEventListener('click', () => { BSPlayer.loadSample(); closeSheet(); });
+    el.querySelector('#useBible').addEventListener('click', () => openBiblePicker());
     el.querySelector('.sheet-foot').hidden = true;
   }
 
@@ -368,5 +389,75 @@ window.ListenScreen = (function () {
     } catch (e) { fallback(); }
   }
 
-  return { init, render, openCommand, openAdd, openTranscript, closeSheet };
+  /* ---------- Audio Bible ---------- */
+  function startBible(book, chapter, { verse = 1, keepPlaying = false } = {}) {
+    if (!BSApp.state.dataReady) { BSApp.toast('The Bible is still loading. Try again in a moment.'); return; }
+    const tv = BSApp.textVersion();
+    const entry = BSData.chapters(tv.id).find(b => b.book.id === book);
+    BSPlayer.loadBible({
+      book, chapter, version: tv.id, versionName: BSApp.version().abbrev,
+      bookName: tv.language !== 'en' && entry.localName ? entry.localName : entry.book.name,
+      lang: { en: 'en-US', es: 'es-ES', fr: 'fr-FR' }[tv.language] || 'en-US',
+      verses: BSData.chapterVerses(book, chapter, tv.id), startVerse: verse, keepPlaying,
+    });
+  }
+
+  // kind: 'ch' or 'book'; delta: +1 or -1. Wraps from Revelation back to Genesis.
+  function navBible(kind, delta, autoAdvance = false) {
+    const b = BSPlayer.state().sermon.bible;
+    if (!b) return;
+    const index = BSData.chapters(b.version);
+    let bi = index.findIndex(x => x.book.id === b.book);
+    let ch = b.chapter;
+    if (kind === 'book') { bi = (bi + delta + index.length) % index.length; ch = 1; }
+    else {
+      ch += delta;
+      if (ch < 1) { bi = (bi - 1 + index.length) % index.length; ch = index[bi].chapters.length; }
+      if (ch > index[bi].chapters.length) { bi = (bi + 1) % index.length; ch = 1; }
+    }
+    startBible(index[bi].book.id, ch, { keepPlaying: autoAdvance || BSPlayer.state().playing });
+  }
+
+  function openBiblePicker(bookId) {
+    if (!BSApp.state.dataReady) { BSApp.toast('The Bible is still loading. Try again in a moment.'); return; }
+    BSApp.setTab('listen');
+    const cur = BSPlayer.state().sermon.bible;
+    const index = BSData.chapters(BSApp.textVersion().id);
+    const book = bookId || (cur ? cur.book : BSApp.state.book);
+    const entry = index.find(b => b.book.id === book) || index[0];
+    sheet = 'bible';
+    const grid = t => index.filter(b => b.book.testament === t).map(b =>
+      `<button data-book="${b.book.id}" aria-current="${b.book.id === entry.book.id}">${esc(b.book.id)}</button>`).join('');
+    const el = mount(`
+      <div class="sheet-head">
+        <div><div class="sheet-kind">Audio Bible \u00b7 ${esc(BSApp.version().abbrev)}</div><h2>${esc(entry.book.name)}: choose a chapter</h2></div>
+        <button class="x" data-close aria-label="${esc(BSi18n.t('close'))}">${X}</button>
+      </div>
+      <div class="sheet-body">
+        <div class="book-grid chap-grid">${entry.chapters.map(c => `<button data-chapter="${c}" aria-current="${!!cur && cur.book === entry.book.id && cur.chapter === c}">${c}</button>`).join('')}</div>
+        <p class="src pick-head">Old Testament</p><div class="book-grid">${grid('OT')}</div>
+        <p class="src pick-head">New Testament</p><div class="book-grid">${grid('NT')}</div>
+      </div>`);
+    el.querySelector('.sheet-foot').hidden = true;
+    el.querySelectorAll('[data-book]').forEach(b => b.addEventListener('click', () => openBiblePicker(b.dataset.book)));
+    el.querySelectorAll('[data-chapter]').forEach(b => b.addEventListener('click', () => {
+      closeSheet();
+      startBible(entry.book.id, +b.dataset.chapter);
+    }));
+  }
+
+  // Keep the Study Bible on the verse being read.
+  let lastFollowed = null;
+  function followAlong(p) {
+    const seg = p.segment;
+    if (!seg || seg.refs[0] === lastFollowed) return;
+    lastFollowed = seg.refs[0];
+    const st = BSApp.state;
+    if (st.bibleQuery || st.searchStrongs) return;
+    const [b, c] = lastFollowed.split('.');
+    Object.assign(st, { book: b, chapter: +c, selectedRef: lastFollowed });
+    if (st.tab === 'study' && st.sub === 'bible') { StudyScreen.render(); StudyScreen.scrollToSelected(); }
+  }
+
+  return { init, render, openCommand, openAdd, openTranscript, openBiblePicker, closeSheet };
 })();

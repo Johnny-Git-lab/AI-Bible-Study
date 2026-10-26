@@ -83,6 +83,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 /* ---------- LISTEN: top half is the display, bottom half is the radio-style button deck ---------- */
 .listen { --play: 112px; --deck-pad: 18px; position: relative; display: grid; grid-template-rows: minmax(0, 1fr) minmax(max-content, 50%); padding-block: 2px var(--deck-pad); }
 .display { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+[hidden] { display: none !important; }
 .stage { min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: safe center; gap: 10px; padding-block: 8px; }
 .eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
@@ -194,6 +195,18 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .pop-full { width: 100%; }
 .pop-scopes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pop-scopes .btn { padding: 10px 8px; font-size: 14px; }
+/* audio Bible controller */
+.bible-nav { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 6px; align-items: center; margin-bottom: 4px; }
+.nav-btn { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); }
+.nav-btn svg { width: 20px; height: 20px; }
+.nav-pick { height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: var(--surface-2); font-weight: 700; font-size: 15px; min-width: 0; }
+.nav-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-pick svg { width: 16px; height: 16px; flex: none; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.book-grid button { padding: 9px 4px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.book-grid button[aria-current="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.chap-grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); }
+.pick-head { margin: 12px 0 6px; }
 @keyframes rise { from { transform: translateY(12px); opacity: .6; } }
 .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 14px 8px 16px; }
 .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 700; text-wrap: balance; }
@@ -368,6 +381,13 @@ select, .search {
           <div class="caption-refs" id="captionRefs"></div>
         </div>
         <div class="player">
+          <div class="bible-nav" id="bibleNav" hidden>
+            <button class="nav-btn" data-nav="book-1" aria-label="Previous book"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6l-6 6 6 6M19 6l-6 6 6 6"/></svg></button>
+            <button class="nav-btn" data-nav="ch-1" aria-label="Previous chapter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+            <button class="nav-pick" id="biblePick" aria-label="Choose book and chapter"><span id="biblePickLabel">John 3</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>
+            <button class="nav-btn" data-nav="ch+1" aria-label="Next chapter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+            <button class="nav-btn" data-nav="book+1" aria-label="Next book"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6l6 6-6 6M5 6l6 6-6 6"/></svg></button>
+          </div>
           <input class="scrub" id="scrub" type="range" min="0" max="1260" step="1" value="0" aria-label="Sermon position">
           <div class="times"><span id="tCur">0:00</span><span id="tDur">21:00</span></div>
           <p class="source-tag" id="sourceTag">Placeholder audio (silent)</p>
